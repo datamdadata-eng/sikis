@@ -234,9 +234,7 @@ export default function Home() {
         return;
       }
 
-      const [salesRes, summaryRes] = await Promise.all([fetch("/api/sales"), fetch("/api/summary")]);
-      setSales(await salesRes.json());
-      setSummary(await summaryRes.json());
+      await refreshData();
 
       setForm((prev) => ({
         ...prev,
@@ -247,6 +245,54 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const refreshData = async () => {
+    const [salesRes, summaryRes, userSummaryRes, closerSummaryRes] = await Promise.all([
+      fetch("/api/sales"),
+      fetch("/api/summary"),
+      fetch("/api/summary/users"),
+      fetch("/api/summary/closers"),
+    ]);
+    setSales(await salesRes.json());
+    setSummary(await summaryRes.json());
+    setUserSummary(await userSummaryRes.json());
+    setCloserSummary(await closerSummaryRes.json());
+  };
+
+  const handleDeleteSale = async (saleId: number) => {
+    if (!confirm("Bu satışı silmek istediğinize emin misiniz?")) return;
+    const res = await fetch(`/api/sales/${saleId}`, { method: "DELETE" });
+    if (!res.ok) {
+      setError("Satış silinemedi.");
+      return;
+    }
+    setError(null);
+    await refreshData();
+  };
+
+  const handleDeleteUser = async (userId: number) => {
+    if (!confirm("Bu kullanıcıyı silmek istediğinize emin misiniz? Bu kullanıcıya bağlı satışlar 'Kullanıcı yok' olarak kalır.")) return;
+    const res = await fetch(`/api/users/${userId}`, { method: "DELETE" });
+    if (!res.ok) {
+      setError("Kullanıcı silinemedi.");
+      return;
+    }
+    setError(null);
+    const usersRes = await fetch("/api/users");
+    setUsers(await usersRes.json());
+  };
+
+  const handleDeleteRecipient = async (recipientId: number) => {
+    if (!confirm("Bu kişiyi silmek istediğinize emin misiniz? Bu kişiye bağlı satışlar 'Para kime' alanında boş kalır.")) return;
+    const res = await fetch(`/api/recipients/${recipientId}`, { method: "DELETE" });
+    if (!res.ok) {
+      setError("Para giden kişi silinemedi.");
+      return;
+    }
+    setError(null);
+    const recipientsRes = await fetch("/api/recipients");
+    setRecipients(await recipientsRes.json());
   };
 
   const todaysSummary = useMemo(() => {
@@ -488,6 +534,22 @@ export default function Home() {
                   Ekle
                 </button>
               </div>
+              {users.length > 0 && (
+                <div className="mt-2 max-h-24 overflow-y-auto space-y-1">
+                  {users.map((u) => (
+                    <div key={u.id} className="flex items-center justify-between rounded bg-slate-900/60 px-2 py-1 text-xs">
+                      <span className="text-slate-200">{u.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteUser(u.id)}
+                        className="text-red-400 hover:text-red-300 text-[10px]"
+                      >
+                        Sil
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
@@ -506,6 +568,22 @@ export default function Home() {
                   Ekle
                 </button>
               </div>
+              {recipients.length > 0 && (
+                <div className="mt-2 max-h-24 overflow-y-auto space-y-1">
+                  {recipients.map((r) => (
+                    <div key={r.id} className="flex items-center justify-between rounded bg-slate-900/60 px-2 py-1 text-xs">
+                      <span className="text-slate-200">{r.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteRecipient(r.id)}
+                        className="text-red-400 hover:text-red-300 text-[10px]"
+                      >
+                        Sil
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-sm">
@@ -673,6 +751,7 @@ export default function Home() {
                   <th className="px-3 py-2 font-medium text-slate-300">Durum</th>
                   <th className="px-3 py-2 font-medium text-slate-300">Para Kime</th>
                   <th className="px-3 py-2 font-medium text-slate-300">Açıklama</th>
+                  <th className="px-3 py-2 font-medium text-slate-300 w-14"></th>
                 </tr>
               </thead>
               <tbody>
@@ -708,11 +787,20 @@ export default function Home() {
                     <td className="px-3 py-2 max-w-xs truncate text-slate-300" title={s.description ?? ""}>
                       {s.description ?? "-"}
                     </td>
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSale(s.id)}
+                        className="text-red-400 hover:text-red-300 text-[10px]"
+                      >
+                        Sil
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {!sales.length && (
                   <tr>
-                    <td className="px-3 py-4 text-center text-slate-400" colSpan={7}>
+                    <td className="px-3 py-4 text-center text-slate-400" colSpan={8}>
                       Henüz satış yok.
                     </td>
                   </tr>
