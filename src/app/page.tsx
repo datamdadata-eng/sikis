@@ -323,7 +323,7 @@ export default function Home() {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center">
         <div className="w-full max-w-sm rounded-xl border border-slate-800 bg-slate-900/70 p-6 shadow-lg">
-          <h1 className="text-xl font-semibold mb-4 text-center">Satış Paneli Girişi</h1>
+          <h1 className="text-xl font-semibold mb-4 text-center">📦 Yuri Ofis Finansal</h1>
           <div className="space-y-3">
             <div className="space-y-1 text-sm">
               <label className="text-slate-300">Kullanıcı Adı</label>
