@@ -1,26 +1,67 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Metalik / slate tonları – koyu ama yumuşak */
+  --background: #1a1f26;
+  --foreground: #e2e8f0;
+  --card: #222831;
+  --card-foreground: #e2e8f0;
+  --popover: #252b35;
+  --popover-foreground: #e2e8f0;
+  --primary: #10b981;
+  --primary-foreground: #022c22;
+  --secondary: #2d3542;
+  --secondary-foreground: #e2e8f0;
+  --muted: #2d3542;
+  --muted-foreground: #94a3b8;
+  --accent: #374151;
+  --accent-foreground: #f1f5f9;
+  --destructive: #ef4444;
+  --destructive-foreground: #fef2f2;
+  --border: #3d4a5c;
+  --input: #3d4a5c;
+  --ring: #10b981;
+  --radius: 0.5rem;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: calc(var(--radius) - 1px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Hafif metalik gradient arka plan (opsiyonel derinlik) */
+@media (min-width: 1024px) {
+  body {
+    background: linear-gradient(160deg, #1a1f26 0%, #1e242d 50%, #1a1f26 100%);
+    background-attachment: fixed;
+  }
 }

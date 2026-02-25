@@ -1,7 +1,28 @@
-/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { Package, LogOut, Plus, Trash2, Calculator, Calendar } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 type User = {
   id: number;
@@ -321,365 +342,324 @@ export default function Home() {
 
   if (!loggedIn) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center">
-        <div className="w-full max-w-sm rounded-xl border border-slate-800 bg-slate-900/70 p-6 shadow-lg">
-          <h1 className="text-xl font-semibold mb-4 text-center">📦 Yuri Ofis Finansal</h1>
-          <div className="space-y-3">
-            <div className="space-y-1 text-sm">
-              <label className="text-slate-300">Kullanıcı Adı</label>
-              <input
-                className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm"
+      <div className="flex min-h-screen items-center justify-center bg-background p-4">
+        <Card className="w-full max-w-sm border-border bg-card shadow-lg">
+          <CardHeader className="space-y-1 text-center">
+            <CardTitle className="flex items-center justify-center gap-2 text-xl">
+              <Package className="size-6 text-primary" />
+              Yuri Ofis Finansal
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="login-user">Kullanıcı Adı</Label>
+              <Input
+                id="login-user"
                 value={loginUser}
                 onChange={(e) => setLoginUser(e.target.value)}
+                placeholder="Kullanıcı adı"
               />
             </div>
-            <div className="space-y-1 text-sm">
-              <label className="text-slate-300">Şifre</label>
-              <input
+            <div className="space-y-2">
+              <Label htmlFor="login-pass">Şifre</Label>
+              <Input
+                id="login-pass"
                 type="password"
-                className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm"
                 value={loginPass}
                 onChange={(e) => setLoginPass(e.target.value)}
+                placeholder="Şifre"
               />
             </div>
-            <label className="flex items-center gap-2 text-xs text-slate-300">
-              <input
-                type="checkbox"
-                className="h-3.5 w-3.5 rounded border-slate-600 bg-slate-900"
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="remember"
                 checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
+                onCheckedChange={(checked) => setRememberMe(checked === true)}
               />
-              <span>Beni hatırla</span>
-            </label>
+              <Label htmlFor="remember" className="text-sm font-normal text-muted-foreground">
+                Beni hatırla
+              </Label>
+            </div>
             {loginError && (
-              <p className="text-xs text-red-400">
-                {loginError}
-              </p>
+              <p className="text-sm text-destructive">{loginError}</p>
             )}
-            <button
-              onClick={handleLogin}
-              className="mt-2 w-full inline-flex items-center justify-center rounded-md bg-emerald-500 px-4 py-2 text-sm font-medium text-emerald-950 shadow-sm transition hover:bg-emerald-400"
-            >
+            <Button onClick={handleLogin} className="w-full" size="lg">
               Giriş Yap
-            </button>
-          </div>
-        </div>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50">
-      <nav className="border-b border-slate-800 bg-slate-900/80 backdrop-blur">
+    <div className="min-h-screen bg-background text-foreground">
+      <nav className="sticky top-0 z-40 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-2">
-            <button className="rounded-full bg-slate-800 px-4 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-700">
-              Dashboard
-            </button>
+          <div className="flex items-center gap-1">
+            <Button variant="secondary" size="sm" className="gap-2" asChild>
+              <Link href="/">
+                <Package className="size-4" />
+                Dashboard
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" className="gap-2" asChild>
+              <Link href="/ciro">
+                <Calendar className="size-4" />
+                Ciro
+              </Link>
+            </Button>
           </div>
-          <div className="relative text-xs">
-            <button
-              onClick={() => setShowLogout((v) => !v)}
-              className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-[11px] text-slate-100"
-            >
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-emerald-950">
-                {currentUserName?.charAt(0).toUpperCase() ?? "A"}
-              </span>
-              <span>{currentUserName ?? "Admin"}</span>
-            </button>
-            {showLogout && (
-              <button
-                onClick={handleLogout}
-                className="absolute right-0 top-full mt-2 w-28 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-100 shadow-lg hover:bg-slate-800"
-              >
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <span className="flex size-7 items-center justify-center rounded-full bg-primary/20 text-xs font-semibold text-primary">
+                  {currentUserName?.charAt(0).toUpperCase() ?? "A"}
+                </span>
+                {currentUserName ?? "Admin"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive focus:text-destructive">
+                <LogOut className="mr-2 size-4" />
                 Çıkış yap
-              </button>
-            )}
-          </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </nav>
       <div className="mx-auto max-w-6xl px-4 py-8">
-        <header className="mb-8 flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Takip Paneli</h1>
-          </div>
+        <header className="mb-8">
+          <h1 className="text-2xl font-bold tracking-tight">Takip Paneli</h1>
         </header>
 
         {error && (
-          <div className="mb-4 rounded-md border border-red-500 bg-red-950/40 px-4 py-2 text-sm text-red-100">
+          <div className="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {error}
           </div>
         )}
 
         <div className="grid gap-6 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-          <section className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-            <h2 className="text-lg font-semibold">Yeni Satış</h2>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1 text-sm">
-                <span className="text-slate-300">Kullanıcı</span>
-                <select
-                  className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm"
-                  value={form.userId}
-                  onChange={(e) => setForm((prev) => ({ ...prev, userId: e.target.value }))}
-                >
-                  <option value="">Seç</option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="space-y-1 text-sm">
-                <span className="text-slate-300">Kapatıcı</span>
-                <select
-                  className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm"
-                  value={form.closerUserId}
-                  onChange={(e) => setForm((prev) => ({ ...prev, closerUserId: e.target.value }))}
-                >
-                  <option value="">Seç (opsiyonel)</option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="space-y-1 text-sm">
-                <span className="text-slate-300">Tutar</span>
-                <input
-                  type="text"
-                  className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm"
-                  value={form.amount}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    const digitsOnly = raw.replace(/\D/g, "");
-                    if (!digitsOnly) {
-                      setForm((prev) => ({ ...prev, amount: "" }));
-                      return;
-                    }
-                    const num = Number(digitsOnly);
-                    setForm((prev) => ({ ...prev, amount: formatNumberTr(num) }));
-                  }}
-                />
-              </label>
-
-              <label className="space-y-1 text-sm sm:col-span-2">
-                <span className="text-slate-300">Açıklama</span>
-                <textarea
-                  className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm"
-                  rows={2}
-                  value={form.description}
-                  onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-                />
-              </label>
-
-              <label className="space-y-1 text-sm">
-                <span className="text-slate-300">Durum</span>
-                <select
-                  className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm"
-                  value={form.status}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, status: e.target.value as "onay" | "patladi" }))
-                  }
-                >
-                  <option value="onay">Onay</option>
-                  <option value="patladi">Patladı</option>
-                </select>
-              </label>
-
-              <label className="space-y-1 text-sm">
-                <span className="text-slate-300">Para Kime Gitti</span>
-                <select
-                  className="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm"
-                  value={form.recipientId}
-                  onChange={(e) => setForm((prev) => ({ ...prev, recipientId: e.target.value }))}
-                >
-                  <option value="">Seç</option>
-                  {recipients.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-            </div>
-
-            <button
-              onClick={handleSubmitSale}
-              disabled={loading}
-              className="mt-2 inline-flex items-center justify-center rounded-md bg-emerald-500 px-4 py-2 text-sm font-medium text-emerald-950 shadow-sm transition hover:bg-emerald-400 disabled:opacity-60"
-            >
-              {loading ? "Kaydediliyor..." : "Satışı Kaydet"}
-            </button>
-          </section>
+          <Card>
+            <CardHeader>
+              <CardTitle>Yeni Satış</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Kullanıcı</Label>
+                  <Select value={form.userId || "_"} onValueChange={(v) => setForm((prev) => ({ ...prev, userId: v === "_" ? "" : v }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seç" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_">Seç</SelectItem>
+                      {users.map((u) => (
+                        <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Kapatıcı</Label>
+                  <Select value={form.closerUserId || "_"} onValueChange={(v) => setForm((prev) => ({ ...prev, closerUserId: v === "_" ? "" : v }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seç (opsiyonel)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_">Seç (opsiyonel)</SelectItem>
+                      {users.map((u) => (
+                        <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Tutar</Label>
+                  <Input
+                    type="text"
+                    value={form.amount}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      const digitsOnly = raw.replace(/\D/g, "");
+                      if (!digitsOnly) {
+                        setForm((prev) => ({ ...prev, amount: "" }));
+                        return;
+                      }
+                      setForm((prev) => ({ ...prev, amount: formatNumberTr(Number(digitsOnly)) }));
+                    }}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label>Açıklama</Label>
+                  <Textarea
+                    rows={2}
+                    value={form.description}
+                    onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+                    placeholder="Açıklama (opsiyonel)"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Durum</Label>
+                  <Select value={form.status} onValueChange={(v) => setForm((prev) => ({ ...prev, status: v as "onay" | "patladi" }))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="onay">Onay</SelectItem>
+                      <SelectItem value="patladi">Patladı</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Para Kime Gitti</Label>
+                  <Select value={form.recipientId || "_"} onValueChange={(v) => setForm((prev) => ({ ...prev, recipientId: v === "_" ? "" : v }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seç" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_">Seç</SelectItem>
+                      {recipients.map((r) => (
+                        <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <Button onClick={handleSubmitSale} disabled={loading} className="w-full sm:w-auto" size="lg">
+                <Plus className="size-4" />
+                {loading ? "Kaydediliyor..." : "Satışı Kaydet"}
+              </Button>
+            </CardContent>
+          </Card>
 
           <section className="space-y-4">
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-              <h2 className="mb-3 text-lg font-semibold">Kullanıcı Ekle</h2>
-              <div className="flex gap-2">
-                <input
-                  className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm"
-                  placeholder="İsim"
-                  value={newUserName}
-                  onChange={(e) => setNewUserName(e.target.value)}
-                />
-                <button
-                  onClick={handleAddUser}
-                  className="inline-flex items-center justify-center rounded-md bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-900 hover:bg-white"
-                >
-                  Ekle
-                </button>
-              </div>
-              {users.length > 0 && (
-                <div className="mt-2 max-h-24 overflow-y-auto space-y-1">
-                  {users.map((u) => (
-                    <div key={u.id} className="flex items-center justify-between rounded bg-slate-900/60 px-2 py-1 text-xs">
-                      <span className="text-slate-200">{u.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteUser(u.id)}
-                        className="text-red-400 hover:text-red-300 text-[10px]"
-                      >
-                        Sil
-                      </button>
-                    </div>
-                  ))}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Kullanıcı Ekle</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="İsim"
+                    value={newUserName}
+                    onChange={(e) => setNewUserName(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button type="button" onClick={handleAddUser} size="sm" variant="secondary">
+                    <Plus className="size-4" />
+                    Ekle
+                  </Button>
                 </div>
-              )}
-            </div>
+                {users.length > 0 && (
+                  <div className="max-h-24 space-y-1 overflow-y-auto">
+                    {users.map((u) => (
+                      <div key={u.id} className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1.5 text-sm">
+                        <span className="font-medium">{u.name}</span>
+                        <Button type="button" variant="ghost" size="sm" className="h-7 text-destructive hover:text-destructive" onClick={() => handleDeleteUser(u.id)}>
+                          <Trash2 className="size-3.5" />
+                          Sil
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-              <h2 className="mb-3 text-lg font-semibold">Para Giden Kişi Ekle</h2>
-              <div className="flex gap-2">
-                <input
-                  className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm"
-                  placeholder="İsim"
-                  value={newRecipientName}
-                  onChange={(e) => setNewRecipientName(e.target.value)}
-                />
-                <button
-                  onClick={handleAddRecipient}
-                  className="inline-flex items-center justify-center rounded-md bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-900 hover:bg-white"
-                >
-                  Ekle
-                </button>
-              </div>
-              {recipients.length > 0 && (
-                <div className="mt-2 max-h-24 overflow-y-auto space-y-1">
-                  {recipients.map((r) => (
-                    <div key={r.id} className="flex items-center justify-between rounded bg-slate-900/60 px-2 py-1 text-xs">
-                      <span className="text-slate-200">{r.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteRecipient(r.id)}
-                        className="text-red-400 hover:text-red-300 text-[10px]"
-                      >
-                        Sil
-                      </button>
-                    </div>
-                  ))}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Para Giden Kişi Ekle</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="İsim"
+                    value={newRecipientName}
+                    onChange={(e) => setNewRecipientName(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button type="button" onClick={handleAddRecipient} size="sm" variant="secondary">
+                    <Plus className="size-4" />
+                    Ekle
+                  </Button>
                 </div>
-              )}
-            </div>
+                {recipients.length > 0 && (
+                  <div className="max-h-24 space-y-1 overflow-y-auto">
+                    {recipients.map((r) => (
+                      <div key={r.id} className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1.5 text-sm">
+                        <span className="font-medium">{r.name}</span>
+                        <Button type="button" variant="ghost" size="sm" className="h-7 text-destructive hover:text-destructive" onClick={() => handleDeleteRecipient(r.id)}>
+                          <Trash2 className="size-3.5" />
+                          Sil
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-sm">
-              <h2 className="mb-3 text-lg font-semibold">Gün Sonu Özeti</h2>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Gün Sonu Özeti (Bugün)</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm">
               {todaysSummary ? (
                 <div className="space-y-3">
                   <div className="space-y-1">
                     <div className="flex justify-between">
-                      <span className="text-slate-300">Onay Toplamı:</span>
-                      <span className="font-medium text-emerald-400">
-                        {formatNumberTr(todaysSummary.totalOnay)} ₺
-                      </span>
+                      <span className="text-muted-foreground">Onay Toplamı</span>
+                      <span className="font-medium text-primary">{formatNumberTr(todaysSummary.totalOnay)} ₺</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-300">Patladı Toplamı:</span>
-                      <span className="font-medium text-red-400">
-                        {formatNumberTr(todaysSummary.totalPatladi)} ₺
-                      </span>
+                      <span className="text-muted-foreground">Patladı Toplamı</span>
+                      <span className="font-medium text-destructive">{formatNumberTr(todaysSummary.totalPatladi)} ₺</span>
                     </div>
-                    <div className="mt-2 flex justify-between border-t border-slate-700 pt-2">
-                      <span className="text-slate-200">Net (Genel):</span>
-                      <span
-                        className={
-                          "font-semibold " + (todaysSummary.net >= 0 ? "text-emerald-400" : "text-red-400")
-                        }
-                      >
+                    <div className="mt-2 flex justify-between border-t border-border pt-2">
+                      <span className="font-medium">Net (Genel)</span>
+                      <span className={cn("font-semibold", todaysSummary.net >= 0 ? "text-primary" : "text-destructive")}>
                         {formatNumberTr(todaysSummary.net)} ₺
                       </span>
                     </div>
                   </div>
-
                   {userSummary.length > 0 && (
-                    <div className="mt-3 border-t border-slate-800 pt-2 text-xs">
-                      <p className="mb-1 text-slate-300 font-medium">Kullanıcı Bazlı Gün Sonu</p>
-                      <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
+                    <div className="mt-3 border-t border-border pt-2 text-xs">
+                      <p className="mb-1 font-medium text-muted-foreground">Kullanıcı bazlı</p>
+                      <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
                         {userSummary.map((u) => {
                           const totalOnay = Number(u.total_onay ?? 0);
                           const totalPatladi = Number(u.total_patladi ?? 0);
                           const net = totalOnay - totalPatladi;
                           return (
-                            <div
-                              key={u.user_id ?? u.user_name ?? Math.random()}
-                              className="flex items-center justify-between rounded-md bg-slate-900/80 px-2 py-1"
-                            >
+                            <div key={u.user_id ?? u.user_name ?? Math.random()} className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1">
                               <div className="flex flex-col">
-                                <span className="text-slate-100">
-                                  {u.user_name ?? "Kullanıcı Yok"}
-                                </span>
-                                <span className="text-[10px] text-slate-400">
-                                  Onay: {formatNumberTr(totalOnay)} ₺ · Patladı: {formatNumberTr(totalPatladi)} ₺
-                                </span>
+                                <span>{u.user_name ?? "Kullanıcı Yok"}</span>
+                                <span className="text-muted-foreground">Onay: {formatNumberTr(totalOnay)} ₺ · Patladı: {formatNumberTr(totalPatladi)} ₺</span>
                               </div>
-                              <span
-                                className={
-                                  "text-[11px] font-semibold " +
-                                  (net >= 0 ? "text-emerald-400" : "text-red-400")
-                                }
-                              >
-                                {formatNumberTr(net)} ₺
-                              </span>
+                              <span className={cn("text-[11px] font-semibold", net >= 0 ? "text-primary" : "text-destructive")}>{formatNumberTr(net)} ₺</span>
                             </div>
                           );
                         })}
                       </div>
                     </div>
                   )}
-
                   {closerSummary.length > 0 && (
-                    <div className="mt-3 border-t border-slate-800 pt-2 text-xs">
-                      <p className="mb-1 text-slate-300 font-medium">Kapatıcı Bazlı Gün Sonu</p>
-                      <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
+                    <div className="mt-3 border-t border-border pt-2 text-xs">
+                      <p className="mb-1 font-medium text-muted-foreground">Kapatıcı bazlı</p>
+                      <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
                         {closerSummary.map((u) => {
                           const totalOnay = Number(u.total_onay ?? 0);
                           const totalPatladi = Number(u.total_patladi ?? 0);
                           const net = totalOnay - totalPatladi;
                           return (
-                            <div
-                              key={u.closer_id ?? u.closer_name ?? Math.random()}
-                              className="flex items-center justify-between rounded-md bg-slate-900/80 px-2 py-1"
-                            >
+                            <div key={u.closer_id ?? u.closer_name ?? Math.random()} className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1">
                               <div className="flex flex-col">
-                                <span className="text-slate-100">
-                                  {u.closer_name ?? "Kullanıcı Yok"}
-                                </span>
-                                <span className="text-[10px] text-slate-400">
-                                  Onay: {formatNumberTr(totalOnay)} ₺ · Patladı: {formatNumberTr(totalPatladi)} ₺
-                                </span>
+                                <span>{u.closer_name ?? "Kullanıcı Yok"}</span>
+                                <span className="text-muted-foreground">Onay: {formatNumberTr(totalOnay)} ₺ · Patladı: {formatNumberTr(totalPatladi)} ₺</span>
                               </div>
-                              <span
-                                className={
-                                  "text-[11px] font-semibold " +
-                                  (net >= 0 ? "text-emerald-400" : "text-red-400")
-                                }
-                              >
-                                {formatNumberTr(net)} ₺
-                              </span>
+                              <span className={cn("text-[11px] font-semibold", net >= 0 ? "text-primary" : "text-destructive")}>{formatNumberTr(net)} ₺</span>
                             </div>
                           );
                         })}
@@ -688,127 +668,120 @@ export default function Home() {
                   )}
                 </div>
               ) : (
-                <p className="text-slate-400 text-xs">Henüz özet yok.</p>
+                <p className="text-muted-foreground text-xs">Henüz özet yok.</p>
               )}
-            </div>
+              </CardContent>
+            </Card>
 
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-sm">
-              <h2 className="mb-3 text-lg font-semibold">Yüzdelik Hesaplama</h2>
-              <div className="space-y-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Calculator className="size-4" />
+                  Yüzdelik Hesaplama
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
                 <div className="flex gap-2">
-                  <input
-                    className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs"
+                  <Input
                     placeholder="Tutar (ör: 100000)"
                     value={calcA}
                     onChange={(e) => {
                       const raw = e.target.value;
                       const digitsOnly = raw.replace(/\D/g, "");
-                      if (!digitsOnly) {
-                        setCalcA("");
-                        return;
-                      }
-                      const num = Number(digitsOnly);
-                      setCalcA(formatNumberTr(num));
+                      if (!digitsOnly) { setCalcA(""); return; }
+                      setCalcA(formatNumberTr(Number(digitsOnly)));
                     }}
+                    className="flex-1"
                   />
-                  <input
-                    className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs"
+                  <Input
                     placeholder="Yüzde (ör: 10)"
                     value={calcB}
                     onChange={(e) => setCalcB(e.target.value)}
+                    className="flex-1"
                   />
                 </div>
-                <button
-                  onClick={runPercentCalc}
-                  className="rounded-md bg-emerald-500 px-3 py-1.5 text-[11px] font-medium text-emerald-950 hover:bg-emerald-400"
-                >
+                <Button onClick={runPercentCalc} size="sm" className="w-full sm:w-auto">
                   Hesapla (Tutar × Yüzde ÷ 100)
-                </button>
-                {calcError && <p className="text-[10px] text-red-400">{calcError}</p>}
+                </Button>
+                {calcError && <p className="text-destructive text-xs">{calcError}</p>}
                 {calcResult !== null && (
-                  <p className="mt-1 text-[11px] text-emerald-300">
-                    Sonuç:{" "}
-                    <span className="font-semibold">
-                      {calcResult} ({!Number.isNaN(Number(calcResult)) ? formatNumberTr(Number(calcResult)) : ""})
-                    </span>
+                  <p className="text-sm text-primary">
+                    Sonuç: <span className="font-semibold">{calcResult} {!Number.isNaN(Number(calcResult)) && `(${formatNumberTr(Number(calcResult))})`}</span>
                   </p>
                 )}
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </section>
         </div>
 
-        <section className="mt-8 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-          <h2 className="mb-3 text-lg font-semibold">Satışlar</h2>
-          <div className="max-h-[400px] overflow-auto rounded-md border border-slate-800">
-            <table className="min-w-full text-left text-xs">
-              <thead className="bg-slate-900 sticky top-0">
-                <tr>
-                  <th className="px-3 py-2 font-medium text-slate-300">Tarih</th>
-                  <th className="px-3 py-2 font-medium text-slate-300">Kullanıcı</th>
-                  <th className="px-3 py-2 font-medium text-slate-300">Kapatıcı</th>
-                  <th className="px-3 py-2 font-medium text-slate-300">Tutar</th>
-                  <th className="px-3 py-2 font-medium text-slate-300">Durum</th>
-                  <th className="px-3 py-2 font-medium text-slate-300">Para Kime</th>
-                  <th className="px-3 py-2 font-medium text-slate-300">Açıklama</th>
-                  <th className="px-3 py-2 font-medium text-slate-300 w-14"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {sales.map((s) => (
-                  <tr key={s.id} className="border-t border-slate-800">
-                    <td className="px-3 py-2 text-slate-300">
-                      {new Date(s.sale_date).toLocaleString("tr-TR", {
-                        day: "2-digit",
-                        month: "2-digit",
-                        year: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </td>
-                    <td className="px-3 py-2 text-slate-200">{s.user_name ?? "-"}</td>
-                    <td className="px-3 py-2 text-slate-200">{s.closer_name ?? "-"}</td>
-                    <td className="px-3 py-2 font-medium text-emerald-300">
-                      {formatNumberTr(Number(s.amount))} ₺
-                    </td>
-                    <td className="px-3 py-2">
-                      <span
-                        className={
-                          "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold " +
-                          (s.status === "onay"
-                            ? "bg-emerald-500/15 text-emerald-300"
-                            : "bg-red-500/15 text-red-300")
-                        }
-                      >
-                        {s.status === "onay" ? "Onay" : "Patladı"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-slate-200">{s.recipient_name ?? "-"}</td>
-                    <td className="px-3 py-2 max-w-xs truncate text-slate-300" title={s.description ?? ""}>
-                      {s.description ?? "-"}
-                    </td>
-                    <td className="px-3 py-2">
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteSale(s.id)}
-                        className="text-red-400 hover:text-red-300 text-[10px]"
-                      >
-                        Sil
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {!sales.length && (
+        <Card className="mt-8">
+          <CardHeader>
+            <CardTitle>Satışlar</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="max-h-[400px] overflow-auto rounded-b-xl">
+              <table className="min-w-full text-left text-sm">
+                <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur">
                   <tr>
-                    <td className="px-3 py-4 text-center text-slate-400" colSpan={8}>
-                      Henüz satış yok.
-                    </td>
+                    <th className="px-4 py-3 font-medium text-muted-foreground">Tarih</th>
+                    <th className="px-4 py-3 font-medium text-muted-foreground">Kullanıcı</th>
+                    <th className="px-4 py-3 font-medium text-muted-foreground">Kapatıcı</th>
+                    <th className="px-4 py-3 font-medium text-muted-foreground">Tutar</th>
+                    <th className="px-4 py-3 font-medium text-muted-foreground">Durum</th>
+                    <th className="px-4 py-3 font-medium text-muted-foreground">Para Kime</th>
+                    <th className="px-4 py-3 font-medium text-muted-foreground">Açıklama</th>
+                    <th className="w-14 px-4 py-3"></th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                </thead>
+                <tbody>
+                  {sales.map((s) => (
+                    <tr key={s.id} className="border-t border-border transition-colors hover:bg-muted/30">
+                      <td className="px-4 py-2.5 text-muted-foreground">
+                        {new Date(s.sale_date).toLocaleString("tr-TR", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          year: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </td>
+                      <td className="px-4 py-2.5">{s.user_name ?? "-"}</td>
+                      <td className="px-4 py-2.5">{s.closer_name ?? "-"}</td>
+                      <td className="px-4 py-2.5 font-medium text-primary">{formatNumberTr(Number(s.amount))} ₺</td>
+                      <td className="px-4 py-2.5">
+                        <span
+                          className={cn(
+                            "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
+                            s.status === "onay" ? "bg-primary/15 text-primary" : "bg-destructive/15 text-destructive"
+                          )}
+                        >
+                          {s.status === "onay" ? "Onay" : "Patladı"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5">{s.recipient_name ?? "-"}</td>
+                      <td className="max-w-xs truncate px-4 py-2.5 text-muted-foreground" title={s.description ?? ""}>
+                        {s.description ?? "-"}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <Button type="button" variant="ghost" size="sm" className="h-8 text-destructive hover:text-destructive" onClick={() => handleDeleteSale(s.id)}>
+                          <Trash2 className="size-4" />
+                          Sil
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                  {!sales.length && (
+                    <tr>
+                      <td className="px-4 py-8 text-center text-muted-foreground" colSpan={8}>
+                        Henüz satış yok.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
