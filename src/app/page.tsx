@@ -114,6 +114,7 @@ export default function Home() {
   const [nonWorkingDate, setNonWorkingDate] = useState("");
   const [nonWorkingDesc, setNonWorkingDesc] = useState("");
   const [nonWorkingLoading, setNonWorkingLoading] = useState(false);
+  const [nonWorkingError, setNonWorkingError] = useState<string | null>(null);
 
   const [newUserName, setNewUserName] = useState("");
   const [newRecipientName, setNewRecipientName] = useState("");
@@ -162,23 +163,30 @@ export default function Home() {
           }
         }
 
-        const [usersRes, recipientsRes, salesRes, summaryRes, userSummaryRes, closerSummaryRes, nonWorkingRes] = await Promise.all([
+        const [usersRes, recipientsRes, salesRes, summaryRes, userSummaryRes, closerSummaryRes] = await Promise.all([
           fetch("/api/users"),
           fetch("/api/recipients"),
           fetch("/api/sales"),
           fetch("/api/summary"),
           fetch("/api/summary/users"),
           fetch("/api/summary/closers"),
-          fetch("/api/non-working-days"),
         ]);
+        if (!usersRes.ok || !recipientsRes.ok || !salesRes.ok || !summaryRes.ok || !userSummaryRes.ok || !closerSummaryRes.ok) {
+          throw new Error("Veriler alınamadı");
+        }
         setUsers(await usersRes.json());
         setRecipients(await recipientsRes.json());
         setSales(await salesRes.json());
         setSummary(await summaryRes.json());
         setUserSummary(await userSummaryRes.json());
         setCloserSummary(await closerSummaryRes.json());
-        const nwJson = await nonWorkingRes.json();
-        setNonWorkingDays(Array.isArray(nwJson) ? nwJson : []);
+        try {
+          const nonWorkingRes = await fetch("/api/non-working-days");
+          const nwJson = await nonWorkingRes.json();
+          setNonWorkingDays(Array.isArray(nwJson) ? nwJson : []);
+        } catch {
+          setNonWorkingDays([]);
+        }
       } catch (e) {
         console.error(e);
         setError("Veriler yüklenemedi");
@@ -255,6 +263,7 @@ export default function Home() {
   const handleAddNonWorking = async () => {
     const date = nonWorkingDate || todayIso;
     if (!date) return;
+    setNonWorkingError(null);
     setNonWorkingLoading(true);
     try {
       const res = await fetch("/api/non-working-days", {
@@ -262,8 +271,13 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date, description: nonWorkingDesc.trim() || null }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 503 && data.error === "setup_required") {
+        setNonWorkingError("Çalışılmadı özelliği için kurulum gerekli. Bir kez POST /api/setup çalıştırın.");
+        return;
+      }
       if (!res.ok) return;
-      const row: NonWorkingDay = await res.json();
+      const row = data as NonWorkingDay;
       setNonWorkingDays((prev) => [row, ...prev.filter((d) => d.date !== row.date)]);
       setNonWorkingDesc("");
     } finally {
@@ -681,6 +695,11 @@ export default function Home() {
                 <p className="text-xs text-muted-foreground mt-1">Günü çalışılmadı olarak işaretleyin; takvimde (Ciro) görünür.</p>
               </CardHeader>
               <CardContent className="space-y-3">
+                {nonWorkingError && (
+                  <p className="rounded-md bg-amber-500/10 border border-amber-500/30 px-2 py-1.5 text-xs text-amber-700 dark:text-amber-400">
+                    {nonWorkingError}
+                  </p>
+                )}
                 <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                   <div className="space-y-1">
                     <Label className="text-xs">Tarih</Label>

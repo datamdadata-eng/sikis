@@ -10,6 +10,14 @@ export async function DELETE(
   if (Number.isNaN(idNum)) {
     return NextResponse.json({ error: "invalid_id" }, { status: 400 });
   }
-  await query("DELETE FROM non_working_days WHERE id = $1", [idNum]);
-  return NextResponse.json({ ok: true });
+  try {
+    await query("DELETE FROM non_working_days WHERE id = $1", [idNum]);
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/relation "non_working_days" does not exist/i.test(msg)) {
+      return NextResponse.json({ ok: true });
+    }
+    throw e;
+  }
 }
