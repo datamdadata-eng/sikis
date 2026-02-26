@@ -77,6 +77,12 @@ type DaySummary = {
   closers: CloserSummaryRow[];
 };
 
+type NonWorkingDay = {
+  id: number;
+  date: string;
+  description: string | null;
+};
+
 const formatNumberTr = (value: number) =>
   new Intl.NumberFormat("tr-TR", {
     minimumFractionDigits: 0,
@@ -104,6 +110,10 @@ export default function Home() {
   const [userSummary, setUserSummary] = useState<UserSummaryRow[]>([]);
   const [closerSummary, setCloserSummary] = useState<CloserSummaryRow[]>([]);
   const [daySummary, setDaySummary] = useState<DaySummary | null>(null);
+  const [nonWorkingDays, setNonWorkingDays] = useState<NonWorkingDay[]>([]);
+  const [nonWorkingDate, setNonWorkingDate] = useState("");
+  const [nonWorkingDesc, setNonWorkingDesc] = useState("");
+  const [nonWorkingLoading, setNonWorkingLoading] = useState(false);
 
   const [newUserName, setNewUserName] = useState("");
   const [newRecipientName, setNewRecipientName] = useState("");
@@ -152,13 +162,14 @@ export default function Home() {
           }
         }
 
-        const [usersRes, recipientsRes, salesRes, summaryRes, userSummaryRes, closerSummaryRes] = await Promise.all([
+        const [usersRes, recipientsRes, salesRes, summaryRes, userSummaryRes, closerSummaryRes, nonWorkingRes] = await Promise.all([
           fetch("/api/users"),
           fetch("/api/recipients"),
           fetch("/api/sales"),
           fetch("/api/summary"),
           fetch("/api/summary/users"),
           fetch("/api/summary/closers"),
+          fetch("/api/non-working-days"),
         ]);
         setUsers(await usersRes.json());
         setRecipients(await recipientsRes.json());
@@ -166,6 +177,8 @@ export default function Home() {
         setSummary(await summaryRes.json());
         setUserSummary(await userSummaryRes.json());
         setCloserSummary(await closerSummaryRes.json());
+        const nwJson = await nonWorkingRes.json();
+        setNonWorkingDays(Array.isArray(nwJson) ? nwJson : []);
       } catch (e) {
         console.error(e);
         setError("Veriler yüklenemedi");
@@ -237,6 +250,31 @@ export default function Home() {
     const recipient: Recipient = await res.json();
     setRecipients((prev) => [recipient, ...prev]);
     setNewRecipientName("");
+  };
+
+  const handleAddNonWorking = async () => {
+    const date = nonWorkingDate || todayIso;
+    if (!date) return;
+    setNonWorkingLoading(true);
+    try {
+      const res = await fetch("/api/non-working-days", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, description: nonWorkingDesc.trim() || null }),
+      });
+      if (!res.ok) return;
+      const row: NonWorkingDay = await res.json();
+      setNonWorkingDays((prev) => [row, ...prev.filter((d) => d.date !== row.date)]);
+      setNonWorkingDesc("");
+    } finally {
+      setNonWorkingLoading(false);
+    }
+  };
+
+  const handleDeleteNonWorking = async (id: number) => {
+    const res = await fetch(`/api/non-working-days/${id}`, { method: "DELETE" });
+    if (!res.ok) return;
+    setNonWorkingDays((prev) => prev.filter((d) => d.id !== id));
   };
 
   const handleSubmitSale = async () => {
@@ -624,6 +662,60 @@ export default function Home() {
                       <div key={r.id} className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1.5 text-sm">
                         <span className="font-medium">{r.name}</span>
                         <Button type="button" variant="ghost" size="sm" className="h-7 text-destructive hover:text-destructive" onClick={() => handleDeleteRecipient(r.id)}>
+                          <Trash2 className="size-3.5" />
+                          Sil
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Calendar className="size-4" />
+                  Çalışılmadı
+                </CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">Günü çalışılmadı olarak işaretleyin; takvimde (Ciro) görünür.</p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Tarih</Label>
+                    <Input
+                      type="date"
+                      value={nonWorkingDate || todayIso}
+                      onChange={(e) => setNonWorkingDate(e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button type="button" onClick={handleAddNonWorking} size="sm" variant="secondary" disabled={nonWorkingLoading || !(nonWorkingDate || todayIso)}>
+                      {nonWorkingLoading ? "Kaydediliyor..." : "Çalışılmadı işaretle"}
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Açıklama (opsiyonel)</Label>
+                  <Input
+                    placeholder="Örn: Resmi tatil, toplantı"
+                    value={nonWorkingDesc}
+                    onChange={(e) => setNonWorkingDesc(e.target.value)}
+                    className="h-9"
+                  />
+                </div>
+                {nonWorkingDays.length > 0 && (
+                  <div className="max-h-32 space-y-1 overflow-y-auto border-t border-border pt-2 mt-2">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">İşaretlenen günler</p>
+                    {nonWorkingDays.slice(0, 15).map((d) => (
+                      <div key={d.id} className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1.5 text-sm">
+                        <div>
+                          <span className="font-medium">{new Date(d.date + "T12:00:00").toLocaleDateString("tr-TR", { day: "numeric", month: "short", year: "numeric" })}</span>
+                          {d.description && <span className="ml-2 text-muted-foreground text-xs">{d.description}</span>}
+                        </div>
+                        <Button type="button" variant="ghost" size="sm" className="h-7 text-destructive hover:text-destructive" onClick={() => handleDeleteNonWorking(d.id)}>
                           <Trash2 className="size-3.5" />
                           Sil
                         </Button>

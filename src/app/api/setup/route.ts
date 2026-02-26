@@ -39,6 +39,15 @@ export async function POST() {
     `);
 
     await query(`
+      CREATE TABLE IF NOT EXISTS non_working_days (
+        id SERIAL PRIMARY KEY,
+        date DATE NOT NULL UNIQUE,
+        description TEXT,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+    `);
+
+    await query(`
       CREATE TABLE IF NOT EXISTS admins (
         id SERIAL PRIMARY KEY,
         username TEXT UNIQUE NOT NULL,

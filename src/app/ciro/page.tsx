@@ -20,6 +20,7 @@ const formatNumberTr = (value: number) =>
   new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(value);
 
 type DailyRow = { date: string; total_onay: string; total_patladi: string; total_amount: string };
+type NonWorkingDay = { id: number; date: string; description: string | null };
 type DayDetail = {
   date: string;
   total_onay: string;
@@ -39,6 +40,7 @@ export default function CiroPage() {
   });
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [dailyData, setDailyData] = useState<DailyRow[]>([]);
+  const [nonWorkingDays, setNonWorkingDays] = useState<NonWorkingDay[]>([]);
   const [dayDetail, setDayDetail] = useState<DayDetail | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -73,9 +75,14 @@ export default function CiroPage() {
     const load = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/summary/daily?month=${currentMonth}`);
-        const data = await res.json();
+        const [dailyRes, nwRes] = await Promise.all([
+          fetch(`/api/summary/daily?month=${currentMonth}`),
+          fetch(`/api/non-working-days?month=${currentMonth}`),
+        ]);
+        const data = await dailyRes.json();
         setDailyData(Array.isArray(data) ? data : []);
+        const nwData = await nwRes.json();
+        setNonWorkingDays(Array.isArray(nwData) ? nwData : []);
       } finally {
         setLoading(false);
       }
@@ -130,7 +137,8 @@ export default function CiroPage() {
   const startWeekday = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1;
   const daysInMonth = lastDay.getDate();
   const dailyMap = Object.fromEntries(dailyData.map((r) => [r.date, r]));
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const nonWorkingMap = Object.fromEntries(nonWorkingDays.map((d) => [d.date, d]));
+  const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Istanbul" });
 
   const prevMonth = () => {
     const d = new Date(y, m - 2, 1);
@@ -213,6 +221,7 @@ export default function CiroPage() {
                 const day = i + 1;
                 const dateStr = `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
                 const row = dailyMap[dateStr];
+                const nw = nonWorkingMap[dateStr];
                 const onay = row ? Number(row.total_onay) : 0;
                 const patladi = row ? Number(row.total_patladi) : 0;
                 const net = onay - patladi;
@@ -226,15 +235,18 @@ export default function CiroPage() {
                     className={cn(
                       "min-h-[64px] rounded-md border p-1 text-left transition-colors hover:bg-accent",
                       isSelected && "ring-2 ring-primary bg-primary/10",
-                      isToday && !isSelected && "border-primary/50 bg-primary/5"
+                      isToday && !isSelected && "border-primary/50 bg-primary/5",
+                      nw && "bg-muted/50 border-amber-500/40"
                     )}
                   >
                     <span className={cn("font-medium", isToday && "text-primary")}>{day}</span>
-                    {row && (
+                    {nw ? (
+                      <p className="mt-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">Çalışılmadı</p>
+                    ) : row ? (
                       <p className={cn("mt-0.5 text-[10px] font-medium", net >= 0 ? "text-primary" : "text-destructive")}>
                         {formatNumberTr(net)} ₺
                       </p>
-                    )}
+                    ) : null}
                   </button>
                 );
               })}
@@ -246,6 +258,14 @@ export default function CiroPage() {
           <Card>
             <CardHeader>
               <CardTitle>Gün sonu özeti — {selectedLabel}</CardTitle>
+              {selectedDate && nonWorkingMap[selectedDate] && (
+                <div className="mt-2 rounded-md bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-sm">
+                  <span className="font-medium text-amber-700 dark:text-amber-400">Çalışılmadı</span>
+                  {nonWorkingMap[selectedDate].description && (
+                    <p className="mt-1 text-muted-foreground">{nonWorkingMap[selectedDate].description}</p>
+                  )}
+                </div>
+              )}
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-3 text-sm">
