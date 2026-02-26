@@ -16,7 +16,7 @@ export async function GET(request: Request) {
         COALESCE(SUM(CASE WHEN status = 'patladi' THEN amount ELSE 0 END), 0) AS total_patladi,
         COALESCE(SUM(amount), 0) AS total_amount
       FROM sales
-      WHERE sale_date::date = $1
+      WHERE (sale_date AT TIME ZONE 'Europe/Istanbul')::date = $1
     `,
       [date]
     ),
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
         SUM(s.amount) AS total_amount
       FROM sales s
       LEFT JOIN users u ON s.user_id = u.id
-      WHERE s.sale_date::date = $1
+      WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date = $1
       GROUP BY u.id, u.name
       ORDER BY total_amount DESC NULLS LAST
     `,
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
         SUM(s.amount) AS total_amount
       FROM sales s
       LEFT JOIN users u ON s.closer_user_id = u.id
-      WHERE s.sale_date::date = $1
+      WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date = $1
       GROUP BY u.id, u.name
       ORDER BY total_amount DESC NULLS LAST
     `,

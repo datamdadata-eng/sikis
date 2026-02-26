@@ -12,7 +12,7 @@ export async function GET() {
       SUM(s.amount) AS total_amount
     FROM sales s
     LEFT JOIN users u ON s.user_id = u.id
-    WHERE sale_date::date = CURRENT_DATE
+    WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date = (NOW() AT TIME ZONE 'Europe/Istanbul')::date
     GROUP BY u.id, u.name
     ORDER BY total_amount DESC NULLS LAST
   `,

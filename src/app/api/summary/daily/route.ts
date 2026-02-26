@@ -16,14 +16,15 @@ export async function GET(request: Request) {
   const { rows } = await query(
     `
     SELECT
-      (sale_date::date)::text AS date,
+      ((sale_date AT TIME ZONE 'Europe/Istanbul')::date)::text AS date,
       COALESCE(SUM(CASE WHEN status = 'onay' THEN amount ELSE 0 END), 0) AS total_onay,
       COALESCE(SUM(CASE WHEN status = 'patladi' THEN amount ELSE 0 END), 0) AS total_patladi,
       COALESCE(SUM(amount), 0) AS total_amount
     FROM sales
-    WHERE sale_date::date >= $1 AND sale_date::date <= $2
-    GROUP BY sale_date::date
-    ORDER BY sale_date::date
+    WHERE (sale_date AT TIME ZONE 'Europe/Istanbul')::date >= $1
+      AND (sale_date AT TIME ZONE 'Europe/Istanbul')::date <= $2
+    GROUP BY (sale_date AT TIME ZONE 'Europe/Istanbul')::date
+    ORDER BY (sale_date AT TIME ZONE 'Europe/Istanbul')::date
   `,
     [startStr, endStr]
   );
