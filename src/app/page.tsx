@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Package, LogOut, Plus, Trash2, Calculator, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ type Sale = {
   description: string | null;
   status: "onay" | "patladi";
   sale_date: string;
+  sale_date_display?: string;
 };
 
 type SummaryRow = {
@@ -65,6 +66,15 @@ type CloserSummaryRow = {
   total_onay: string;
   total_patladi: string;
   total_amount: string;
+};
+
+type DaySummary = {
+  date: string;
+  total_onay: string;
+  total_patladi: string;
+  net: number;
+  users: UserSummaryRow[];
+  closers: CloserSummaryRow[];
 };
 
 const formatNumberTr = (value: number) =>
@@ -93,6 +103,7 @@ export default function Home() {
   const [summary, setSummary] = useState<SummaryRow[]>([]);
   const [userSummary, setUserSummary] = useState<UserSummaryRow[]>([]);
   const [closerSummary, setCloserSummary] = useState<CloserSummaryRow[]>([]);
+  const [daySummary, setDaySummary] = useState<DaySummary | null>(null);
 
   const [newUserName, setNewUserName] = useState("");
   const [newRecipientName, setNewRecipientName] = useState("");
@@ -279,6 +290,11 @@ export default function Home() {
     setSummary(await summaryRes.json());
     setUserSummary(await userSummaryRes.json());
     setCloserSummary(await closerSummaryRes.json());
+    const today = todayIsoRef.current;
+    if (today) {
+      const dayRes = await fetch(`/api/summary/day?date=${today}`);
+      if (dayRes.ok) setDaySummary(await dayRes.json());
+    }
   };
 
   const handleDeleteSale = async (saleId: number) => {
@@ -316,14 +332,31 @@ export default function Home() {
     setRecipients(await recipientsRes.json());
   };
 
-  const todaysSummary = useMemo(() => {
-    if (!summary.length) return null;
-    const todayRow = summary[0];
-    const totalOnay = Number(todayRow.total_onay ?? 0);
-    const totalPatladi = Number(todayRow.total_patladi ?? 0);
-    const net = totalOnay - totalPatladi;
-    return { totalOnay, totalPatladi, net };
-  }, [summary]);
+  // Bugün (Istanbul) — mount'ta hesapla; gün sonu sadece bu günün verisi
+  const [todayIso, setTodayIso] = useState("");
+  const todayIsoRef = useRef("");
+  useEffect(() => {
+    const iso = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Istanbul" });
+    setTodayIso(iso);
+    todayIsoRef.current = iso;
+  }, []);
+
+  // Gün sonu kartı sadece bugünün verisiyle doldurulur (dünün verisi asla gösterilmez)
+  useEffect(() => {
+    if (!todayIso) return;
+    let cancelled = false;
+    fetch(`/api/summary/day?date=${todayIso}`)
+      .then((r) => r.json())
+      .then((data: DaySummary) => {
+        if (!cancelled) setDaySummary(data);
+      })
+      .catch(() => {
+        if (!cancelled) setDaySummary(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [todayIso]);
 
   const runPercentCalc = () => {
     setCalcError(null);
@@ -603,32 +636,43 @@ export default function Home() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Gün Sonu Özeti (Bugün)</CardTitle>
+                <CardTitle className="text-base">
+                  Gün Sonu Özeti
+                  {todayIso ? (
+                    <span className="ml-1.5 font-normal text-muted-foreground">
+                      — {new Date(todayIso + "T12:00:00").toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })}
+                    </span>
+                  ) : (
+                    " (Bugün)"
+                  )}
+                </CardTitle>
               </CardHeader>
               <CardContent className="text-sm">
-              {todaysSummary ? (
+              {!todayIso ? (
+                <p className="text-muted-foreground text-xs">Yükleniyor…</p>
+              ) : daySummary ? (
                 <div className="space-y-3">
                   <div className="space-y-1">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Onay Toplamı</span>
-                      <span className="font-medium text-primary">{formatNumberTr(todaysSummary.totalOnay)} ₺</span>
+                      <span className="font-medium text-primary">{formatNumberTr(Number(daySummary.total_onay ?? 0))} ₺</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Patladı Toplamı</span>
-                      <span className="font-medium text-destructive">{formatNumberTr(todaysSummary.totalPatladi)} ₺</span>
+                      <span className="font-medium text-destructive">{formatNumberTr(Number(daySummary.total_patladi ?? 0))} ₺</span>
                     </div>
                     <div className="mt-2 flex justify-between border-t border-border pt-2">
                       <span className="font-medium">Net (Genel)</span>
-                      <span className={cn("font-semibold", todaysSummary.net >= 0 ? "text-primary" : "text-destructive")}>
-                        {formatNumberTr(todaysSummary.net)} ₺
+                      <span className={cn("font-semibold", daySummary.net >= 0 ? "text-primary" : "text-destructive")}>
+                        {formatNumberTr(daySummary.net)} ₺
                       </span>
                     </div>
                   </div>
-                  {userSummary.length > 0 && (
+                  {daySummary.users.length > 0 && (
                     <div className="mt-3 border-t border-border pt-2 text-xs">
                       <p className="mb-1 font-medium text-muted-foreground">Kullanıcı bazlı</p>
                       <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
-                        {userSummary.map((u) => {
+                        {daySummary.users.map((u) => {
                           const totalOnay = Number(u.total_onay ?? 0);
                           const totalPatladi = Number(u.total_patladi ?? 0);
                           const net = totalOnay - totalPatladi;
@@ -645,11 +689,11 @@ export default function Home() {
                       </div>
                     </div>
                   )}
-                  {closerSummary.length > 0 && (
+                  {daySummary.closers.length > 0 && (
                     <div className="mt-3 border-t border-border pt-2 text-xs">
                       <p className="mb-1 font-medium text-muted-foreground">Kapatıcı bazlı</p>
                       <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
-                        {closerSummary.map((u) => {
+                        {daySummary.closers.map((u) => {
                           const totalOnay = Number(u.total_onay ?? 0);
                           const totalPatladi = Number(u.total_patladi ?? 0);
                           const net = totalOnay - totalPatladi;
@@ -668,7 +712,12 @@ export default function Home() {
                   )}
                 </div>
               ) : (
-                <p className="text-muted-foreground text-xs">Henüz özet yok.</p>
+                <div className="space-y-1">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Onay Toplamı</span><span className="font-medium">0 ₺</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Patladı Toplamı</span><span className="font-medium">0 ₺</span></div>
+                  <div className="mt-2 flex justify-between border-t border-border pt-2"><span className="font-medium">Net (Genel)</span><span className="font-semibold">0 ₺</span></div>
+                  <p className="pt-2 text-xs text-muted-foreground">Bugün henüz satış yok.</p>
+                </div>
               )}
               </CardContent>
             </Card>
@@ -737,7 +786,8 @@ export default function Home() {
                   {sales.map((s) => (
                     <tr key={s.id} className="border-t border-border transition-colors hover:bg-muted/30">
                       <td className="px-4 py-2.5 text-muted-foreground">
-                        {new Date(s.sale_date).toLocaleString("tr-TR", {
+                        {s.sale_date_display ?? new Date(s.sale_date).toLocaleString("tr-TR", {
+                          timeZone: "Europe/Istanbul",
                           day: "2-digit",
                           month: "2-digit",
                           year: "2-digit",

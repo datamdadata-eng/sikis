@@ -10,6 +10,7 @@ export async function GET() {
       s.description,
       s.status,
       s.sale_date,
+      to_char(s.sale_date AT TIME ZONE 'Europe/Istanbul', 'DD.MM.YY HH24:MI') AS sale_date_display,
       u.name AS user_name,
       cu.name AS closer_name,
       r.name AS recipient_name
