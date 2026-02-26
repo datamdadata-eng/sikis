@@ -14,8 +14,9 @@ export async function GET(request: Request) {
     if (month && /^\d{4}-\d{2}$/.test(month)) {
       const [y, m] = month.split("-").map(Number);
       const start = `${y}-${String(m).padStart(2, "0")}-01`;
-      const end = `${y}-${String(m).padStart(2, "0")}-31`;
-      const { rows } = await query<{ id: number; date: string; description: string | null }>(
+      const lastDay = new Date(y, m, 0).getDate();
+      const end = `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+      const { rows } = await query<{ id: number; date: string | Date; description: string | null }>(
         `
         SELECT id, date::text AS date, description
         FROM non_working_days
@@ -24,7 +25,12 @@ export async function GET(request: Request) {
       `,
         [start, end]
       );
-      return NextResponse.json(rows);
+      const normalized = rows.map((r) => ({
+        id: r.id,
+        date: typeof r.date === "string" ? r.date : r.date instanceof Date ? r.date.toISOString().slice(0, 10) : String(r.date).slice(0, 10),
+        description: r.description,
+      }));
+      return NextResponse.json(normalized);
     }
 
     const { rows } = await query<{ id: number; date: string; description: string | null }>(
