@@ -81,8 +81,12 @@ export default function CiroPage() {
         ]);
         const data = await dailyRes.json();
         setDailyData(Array.isArray(data) ? data : []);
-        const nwData = await nwRes.json();
-        setNonWorkingDays(Array.isArray(nwData) ? nwData : []);
+        try {
+          const nwData = await nwRes.json();
+          setNonWorkingDays(Array.isArray(nwData) ? nwData : []);
+        } catch {
+          setNonWorkingDays([]);
+        }
       } finally {
         setLoading(false);
       }
@@ -137,7 +141,9 @@ export default function CiroPage() {
   const startWeekday = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1;
   const daysInMonth = lastDay.getDate();
   const dailyMap = Object.fromEntries(dailyData.map((r) => [r.date, r]));
-  const nonWorkingMap = Object.fromEntries(nonWorkingDays.map((d) => [d.date, d]));
+  const nonWorkingMap = Object.fromEntries(
+    nonWorkingDays.map((d) => [(d.date || "").slice(0, 10), d])
+  );
   const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Istanbul" });
 
   const prevMonth = () => {
@@ -236,12 +242,12 @@ export default function CiroPage() {
                       "min-h-[64px] rounded-md border p-1 text-left transition-colors hover:bg-accent",
                       isSelected && "ring-2 ring-primary bg-primary/10",
                       isToday && !isSelected && "border-primary/50 bg-primary/5",
-                      nw && "bg-muted/50 border-amber-500/40"
+                      nw && "bg-amber-500/15 border-amber-500/60 dark:bg-amber-500/20"
                     )}
                   >
                     <span className={cn("font-medium", isToday && "text-primary")}>{day}</span>
                     {nw ? (
-                      <p className="mt-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">Çalışılmadı</p>
+                      <p className="mt-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">Çalışılmadı</p>
                     ) : row ? (
                       <p className={cn("mt-0.5 text-[10px] font-medium", net >= 0 ? "text-primary" : "text-destructive")}>
                         {formatNumberTr(net)} ₺
@@ -251,6 +257,12 @@ export default function CiroPage() {
                 );
               })}
             </div>
+            {nonWorkingDays.length > 0 && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                <span className="inline-block h-2 w-2 rounded-sm bg-amber-500/60 align-middle mr-1" />
+                Çalışılmadı işaretli günler
+              </p>
+            )}
           </CardContent>
         </Card>
 
