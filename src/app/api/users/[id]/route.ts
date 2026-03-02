@@ -14,7 +14,8 @@ export async function DELETE(
     await query("DELETE FROM users WHERE id = $1", [userId]);
     return NextResponse.json({ ok: true });
   } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: "delete_failed" }, { status: 500 });
+    console.error("[users DELETE]", e);
+    const message = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: "delete_failed", message }, { status: 500 });
   }
 }

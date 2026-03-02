@@ -362,14 +362,21 @@ export default function Home() {
 
   const handleDeleteUser = async (userId: number) => {
     if (!confirm("Bu kullanıcıyı silmek istediğinize emin misiniz? Bu kullanıcıya bağlı satışlar 'Kullanıcı yok' olarak kalır.")) return;
-    const res = await fetch(`/api/users/${userId}`, { method: "DELETE" });
-    if (!res.ok) {
+    try {
+      const res = await fetch(`/api/users/${userId}`, { method: "DELETE", cache: "no-store" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setError((err as { error?: string }).error === "delete_failed" ? "Kullanıcı silinemedi (veritabanı hatası)." : "Kullanıcı silinemedi.");
+        return;
+      }
+      setError(null);
+      setUsers((prev) => prev.filter((u) => u.id !== userId));
+      const usersRes = await fetch("/api/users", { cache: "no-store" });
+      setUsers(await usersRes.json());
+    } catch (e) {
+      console.error(e);
       setError("Kullanıcı silinemedi.");
-      return;
     }
-    setError(null);
-    const usersRes = await fetch("/api/users");
-    setUsers(await usersRes.json());
   };
 
   const handleDeleteRecipient = async (recipientId: number) => {
@@ -616,6 +623,12 @@ export default function Home() {
                 <Plus className="size-4" />
                 {loading ? "Kaydediliyor..." : "Satışı Kaydet"}
               </Button>
+              <div className="flex flex-col items-center justify-center rounded-lg border border-border bg-muted/30 py-8 text-center">
+                <p className="text-sm font-medium uppercase tracking-wider text-muted-foreground">Toplam onayı</p>
+                <p className="mt-1 text-5xl font-bold tracking-tight text-primary sm:text-6xl">
+                  {formatNumberTr(daySummary ? Number(daySummary.total_onay) : 0)} ₺
+                </p>
+              </div>
             </CardContent>
           </Card>
 
