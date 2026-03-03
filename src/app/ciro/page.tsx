@@ -307,7 +307,7 @@ export default function CiroPage() {
                       const net = onay - patladi;
                       return (
                         <div key={u.user_id ?? u.user_name ?? Math.random()} className="flex justify-between text-sm">
-                          <span>{u.user_name ?? "—"}</span>
+                          <span className="uppercase">{u.user_name ?? "—"}</span>
                           <span className={cn("font-medium", net >= 0 ? "text-primary" : "text-destructive")}>
                             {formatNumberTr(net)} ₺
                           </span>
@@ -328,7 +328,7 @@ export default function CiroPage() {
                       const net = onay - patladi;
                       return (
                         <div key={u.closer_id ?? u.closer_name ?? Math.random()} className="flex justify-between text-sm">
-                          <span>{u.closer_name ?? "—"}</span>
+                          <span className="uppercase">{u.closer_name ?? "—"}</span>
                           <span className={cn("font-medium", net >= 0 ? "text-primary" : "text-destructive")}>
                             {formatNumberTr(net)} ₺
                           </span>

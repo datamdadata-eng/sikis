@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Package, LogOut, Plus, Trash2, Calculator, Calendar } from "lucide-react";
+import { Package, LogOut, Plus, Trash2, Calculator, Calendar, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,6 +39,7 @@ type Sale = {
   user_name: string | null;
   closer_name: string | null;
   recipient_name: string | null;
+  recipient_id?: number | null;
   amount: number;
   description: string | null;
   status: "onay" | "patladi";
@@ -115,6 +116,14 @@ export default function Home() {
   const [nonWorkingDesc, setNonWorkingDesc] = useState("");
   const [nonWorkingLoading, setNonWorkingLoading] = useState(false);
   const [nonWorkingError, setNonWorkingError] = useState<string | null>(null);
+
+  const [editingSale, setEditingSale] = useState<Sale | null>(null);
+  const [editForm, setEditForm] = useState<{ amount: string; status: "onay" | "patladi"; recipientId: string }>({
+    amount: "",
+    status: "onay",
+    recipientId: "",
+  });
+  const [editLoading, setEditLoading] = useState(false);
 
   const [newUserName, setNewUserName] = useState("");
   const [newRecipientName, setNewRecipientName] = useState("");
@@ -360,6 +369,48 @@ export default function Home() {
     await refreshData();
   };
 
+  const openEditSale = (s: Sale) => {
+    setEditingSale(s);
+    setEditForm({
+      amount: formatNumberTr(Number(s.amount)),
+      status: s.status,
+      recipientId: s.recipient_id != null ? String(s.recipient_id) : "",
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingSale) return;
+    const numericAmount = parseTrAmountToNumber(editForm.amount);
+    if (numericAmount <= 0) {
+      setError("Tutar 0'dan büyük olmalı.");
+      return;
+    }
+    setEditLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/sales/${editingSale.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: numericAmount,
+          status: editForm.status,
+          recipientId: editForm.recipientId || null,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError((data as { error?: string }).error === "invalid_amount" ? "Geçersiz tutar." : "Güncelleme başarısız.");
+        return;
+      }
+      setEditingSale(null);
+      await refreshData();
+    } catch (e) {
+      setError("Güncelleme başarısız.");
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   const handleDeleteUser = async (userId: number) => {
     if (!confirm("Bu kullanıcıyı silmek istediğinize emin misiniz? Bu kullanıcıya bağlı satışlar 'Kullanıcı yok' olarak kalır.")) return;
     try {
@@ -547,7 +598,7 @@ export default function Home() {
                     <SelectContent>
                       <SelectItem value="_">Seç</SelectItem>
                       {users.map((u) => (
-                        <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
+                        <SelectItem key={u.id} value={String(u.id)}><span className="uppercase">{u.name}</span></SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -561,7 +612,7 @@ export default function Home() {
                     <SelectContent>
                       <SelectItem value="_">Seç (opsiyonel)</SelectItem>
                       {users.map((u) => (
-                        <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
+                        <SelectItem key={u.id} value={String(u.id)}><span className="uppercase">{u.name}</span></SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -613,7 +664,7 @@ export default function Home() {
                     <SelectContent>
                       <SelectItem value="_">Seç</SelectItem>
                       {recipients.map((r) => (
-                        <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>
+                        <SelectItem key={r.id} value={String(r.id)}><span className="uppercase">{r.name}</span></SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -654,7 +705,7 @@ export default function Home() {
                   <div className="max-h-24 space-y-1 overflow-y-auto">
                     {users.map((u) => (
                       <div key={u.id} className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1.5 text-sm">
-                        <span className="font-medium">{u.name}</span>
+                        <span className="font-medium uppercase">{u.name}</span>
                         <Button type="button" variant="ghost" size="sm" className="h-7 text-destructive hover:text-destructive" onClick={() => handleDeleteUser(u.id)}>
                           <Trash2 className="size-3.5" />
                           Sil
@@ -687,7 +738,7 @@ export default function Home() {
                   <div className="max-h-24 space-y-1 overflow-y-auto">
                     {recipients.map((r) => (
                       <div key={r.id} className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1.5 text-sm">
-                        <span className="font-medium">{r.name}</span>
+                        <span className="font-medium uppercase">{r.name}</span>
                         <Button type="button" variant="ghost" size="sm" className="h-7 text-destructive hover:text-destructive" onClick={() => handleDeleteRecipient(r.id)}>
                           <Trash2 className="size-3.5" />
                           Sil
@@ -803,7 +854,7 @@ export default function Home() {
                           return (
                             <div key={u.user_id ?? u.user_name ?? Math.random()} className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1">
                               <div className="flex flex-col">
-                                <span>{u.user_name ?? "Kullanıcı Yok"}</span>
+                                <span className="uppercase">{u.user_name ?? "Kullanıcı Yok"}</span>
                                 <span className="text-muted-foreground">Onay: {formatNumberTr(totalOnay)} ₺ · Patladı: {formatNumberTr(totalPatladi)} ₺</span>
                               </div>
                               <span className={cn("text-[11px] font-semibold", net >= 0 ? "text-primary" : "text-destructive")}>{formatNumberTr(net)} ₺</span>
@@ -824,7 +875,7 @@ export default function Home() {
                           return (
                             <div key={u.closer_id ?? u.closer_name ?? Math.random()} className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1">
                               <div className="flex flex-col">
-                                <span>{u.closer_name ?? "Kullanıcı Yok"}</span>
+                                <span className="uppercase">{u.closer_name ?? "Kullanıcı Yok"}</span>
                                 <span className="text-muted-foreground">Onay: {formatNumberTr(totalOnay)} ₺ · Patladı: {formatNumberTr(totalPatladi)} ₺</span>
                               </div>
                               <span className={cn("text-[11px] font-semibold", net >= 0 ? "text-primary" : "text-destructive")}>{formatNumberTr(net)} ₺</span>
@@ -887,6 +938,79 @@ export default function Home() {
           </section>
         </div>
 
+        {editingSale && (
+          <Card className="mt-8 border-primary/50">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Satışı düzenle</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                {editingSale.sale_date_display ?? editingSale.id} · {editingSale.user_name ?? "-"}
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>Tutar</Label>
+                  <Input
+                    value={editForm.amount}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      const digitsOnly = raw.replace(/\D/g, "");
+                      if (!digitsOnly) {
+                        setEditForm((prev) => ({ ...prev, amount: "" }));
+                        return;
+                      }
+                      setEditForm((prev) => ({ ...prev, amount: formatNumberTr(Number(digitsOnly)) }));
+                    }}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Durum</Label>
+                  <Select
+                    value={editForm.status}
+                    onValueChange={(v) => setEditForm((prev) => ({ ...prev, status: v as "onay" | "patladi" }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="onay">Onay</SelectItem>
+                      <SelectItem value="patladi">Patladı</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Para Kime Gitti</Label>
+                  <Select
+                    value={editForm.recipientId || "_"}
+                    onValueChange={(v) => setEditForm((prev) => ({ ...prev, recipientId: v === "_" ? "" : v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seç" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_">Seç</SelectItem>
+                      {recipients.map((r) => (
+                        <SelectItem key={r.id} value={String(r.id)}>
+                          <span className="uppercase">{r.name}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => setEditingSale(null)} disabled={editLoading}>
+                  İptal
+                </Button>
+                <Button type="button" onClick={handleSaveEdit} disabled={editLoading}>
+                  {editLoading ? "Kaydediliyor..." : "Kaydet"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Card className="mt-8">
           <CardHeader>
             <CardTitle>Satışlar</CardTitle>
@@ -903,7 +1027,7 @@ export default function Home() {
                     <th className="px-4 py-3 font-medium text-muted-foreground">Durum</th>
                     <th className="px-4 py-3 font-medium text-muted-foreground">Para Kime</th>
                     <th className="px-4 py-3 font-medium text-muted-foreground">Açıklama</th>
-                    <th className="w-14 px-4 py-3"></th>
+                    <th className="w-28 px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -919,8 +1043,8 @@ export default function Home() {
                           minute: "2-digit",
                         })}
                       </td>
-                      <td className="px-4 py-2.5">{s.user_name ?? "-"}</td>
-                      <td className="px-4 py-2.5">{s.closer_name ?? "-"}</td>
+                      <td className="px-4 py-2.5 uppercase">{s.user_name ?? "-"}</td>
+                      <td className="px-4 py-2.5 uppercase">{s.closer_name ?? "-"}</td>
                       <td className="px-4 py-2.5 font-medium text-primary">{formatNumberTr(Number(s.amount))} ₺</td>
                       <td className="px-4 py-2.5">
                         <span
@@ -932,15 +1056,21 @@ export default function Home() {
                           {s.status === "onay" ? "Onay" : "Patladı"}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5">{s.recipient_name ?? "-"}</td>
+                      <td className="px-4 py-2.5 uppercase">{s.recipient_name ?? "-"}</td>
                       <td className="max-w-xs truncate px-4 py-2.5 text-muted-foreground" title={s.description ?? ""}>
                         {s.description ?? "-"}
                       </td>
                       <td className="px-4 py-2.5">
-                        <Button type="button" variant="ghost" size="sm" className="h-8 text-destructive hover:text-destructive" onClick={() => handleDeleteSale(s.id)}>
-                          <Trash2 className="size-4" />
-                          Sil
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button type="button" variant="ghost" size="sm" className="h-8 text-primary hover:text-primary" onClick={() => openEditSale(s)}>
+                            <Pencil className="size-4" />
+                            Düzenle
+                          </Button>
+                          <Button type="button" variant="ghost" size="sm" className="h-8 text-destructive hover:text-destructive" onClick={() => handleDeleteSale(s.id)}>
+                            <Trash2 className="size-4" />
+                            Sil
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
