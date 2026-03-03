@@ -65,7 +65,7 @@ export async function GET(request: Request) {
     total_onay: totals.total_onay,
     total_patladi: totals.total_patladi,
     total_amount: totals.total_amount,
-    net: Number(totals.total_onay) - Number(totals.total_patladi),
+    net: Number(totals.total_onay),
     users: usersRes.rows,
     closers: closersRes.rows,
   });

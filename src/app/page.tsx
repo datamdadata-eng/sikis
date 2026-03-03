@@ -850,7 +850,7 @@ export default function Home() {
                         {daySummary.users.map((u) => {
                           const totalOnay = Number(u.total_onay ?? 0);
                           const totalPatladi = Number(u.total_patladi ?? 0);
-                          const net = totalOnay - totalPatladi;
+                          const net = totalOnay;
                           return (
                             <div key={u.user_id ?? u.user_name ?? Math.random()} className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1">
                               <div className="flex flex-col">
@@ -871,7 +871,7 @@ export default function Home() {
                         {daySummary.closers.map((u) => {
                           const totalOnay = Number(u.total_onay ?? 0);
                           const totalPatladi = Number(u.total_patladi ?? 0);
-                          const net = totalOnay - totalPatladi;
+                          const net = totalOnay;
                           return (
                             <div key={u.closer_id ?? u.closer_name ?? Math.random()} className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1">
                               <div className="flex flex-col">

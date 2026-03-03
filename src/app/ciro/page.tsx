@@ -229,8 +229,7 @@ export default function CiroPage() {
                 const row = dailyMap[dateStr];
                 const nw = nonWorkingMap[dateStr];
                 const onay = row ? Number(row.total_onay) : 0;
-                const patladi = row ? Number(row.total_patladi) : 0;
-                const net = onay - patladi;
+                const net = onay;
                 const isToday = dateStr === todayStr;
                 const isSelected = dateStr === selectedDate;
                 return (
@@ -303,8 +302,7 @@ export default function CiroPage() {
                   <div className="space-y-1 rounded-lg border border-border bg-muted/20 p-2">
                     {dayDetail.users.map((u) => {
                       const onay = Number(u.total_onay);
-                      const patladi = Number(u.total_patladi);
-                      const net = onay - patladi;
+                      const net = onay;
                       return (
                         <div key={u.user_id ?? u.user_name ?? Math.random()} className="flex justify-between text-sm">
                           <span className="uppercase">{u.user_name ?? "—"}</span>
@@ -324,8 +322,7 @@ export default function CiroPage() {
                   <div className="space-y-1 rounded-lg border border-border bg-muted/20 p-2">
                     {dayDetail.closers.map((u) => {
                       const onay = Number(u.total_onay);
-                      const patladi = Number(u.total_patladi);
-                      const net = onay - patladi;
+                      const net = onay;
                       return (
                         <div key={u.closer_id ?? u.closer_name ?? Math.random()} className="flex justify-between text-sm">
                           <span className="uppercase">{u.closer_name ?? "—"}</span>
