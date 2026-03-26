@@ -155,6 +155,14 @@ export default function CiroPage() {
     setCurrentUserName(null);
   };
 
+  const selectedDaySales = useMemo(() => {
+    if (!selectedDate) return [];
+    return sales.filter((sale) => {
+      const dateStr = new Date(sale.sale_date).toLocaleDateString("en-CA", { timeZone: "Europe/Istanbul" });
+      return dateStr === selectedDate;
+    });
+  }, [sales, selectedDate]);
+
   if (!loggedIn) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -192,13 +200,6 @@ export default function CiroPage() {
   const selectedLabel = selectedDate
     ? new Date(selectedDate + "T12:00:00").toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })
     : "Gün seçin";
-  const selectedDaySales = useMemo(() => {
-    if (!selectedDate) return [];
-    return sales.filter((sale) => {
-      const dateStr = new Date(sale.sale_date).toLocaleDateString("en-CA", { timeZone: "Europe/Istanbul" });
-      return dateStr === selectedDate;
-    });
-  }, [sales, selectedDate]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
