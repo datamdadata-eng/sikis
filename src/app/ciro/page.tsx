@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Package, LogOut, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,17 @@ const formatNumberTr = (value: number) =>
 
 type DailyRow = { date: string; total_onay: string; total_patladi: string; total_amount: string };
 type NonWorkingDay = { id: number; date: string; description: string | null };
+type Sale = {
+  id: number;
+  user_name: string | null;
+  closer_name: string | null;
+  recipient_name: string | null;
+  amount: number;
+  description: string | null;
+  status: "onay" | "patladi";
+  sale_date: string;
+  sale_date_display?: string;
+};
 type DayDetail = {
   date: string;
   total_onay: string;
@@ -42,6 +53,7 @@ export default function CiroPage() {
   const [dailyData, setDailyData] = useState<DailyRow[]>([]);
   const [nonWorkingDays, setNonWorkingDays] = useState<NonWorkingDay[]>([]);
   const [dayDetail, setDayDetail] = useState<DayDetail | null>(null);
+  const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(false);
 
   const checkAuth = useCallback(async () => {
@@ -93,6 +105,27 @@ export default function CiroPage() {
     };
     load();
   }, [loggedIn, currentMonth]);
+
+  useEffect(() => {
+    if (!loggedIn) {
+      setSales([]);
+      return;
+    }
+    const loadSales = async () => {
+      try {
+        const res = await fetch("/api/sales");
+        if (!res.ok) {
+          setSales([]);
+          return;
+        }
+        const data = await res.json();
+        setSales(Array.isArray(data) ? data : []);
+      } catch {
+        setSales([]);
+      }
+    };
+    loadSales();
+  }, [loggedIn]);
 
   useEffect(() => {
     if (!loggedIn || !selectedDate) {
@@ -159,6 +192,13 @@ export default function CiroPage() {
   const selectedLabel = selectedDate
     ? new Date(selectedDate + "T12:00:00").toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })
     : "Gün seçin";
+  const selectedDaySales = useMemo(() => {
+    if (!selectedDate) return [];
+    return sales.filter((sale) => {
+      const dateStr = new Date(sale.sale_date).toLocaleDateString("en-CA", { timeZone: "Europe/Istanbul" });
+      return dateStr === selectedDate;
+    });
+  }, [sales, selectedDate]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -339,6 +379,72 @@ export default function CiroPage() {
               {dayDetail.users.length === 0 && dayDetail.closers.length === 0 && Number(dayDetail.total_amount) === 0 && (
                 <p className="text-muted-foreground text-sm">Bu güne ait satış yok.</p>
               )}
+            </CardContent>
+          </Card>
+        )}
+
+        {selectedDate && (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Satışlar — {selectedLabel}</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="max-h-[420px] overflow-auto rounded-b-xl">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur">
+                    <tr>
+                      <th className="px-4 py-3 font-medium text-muted-foreground">Tarih</th>
+                      <th className="px-4 py-3 font-medium text-muted-foreground">Kullanıcı</th>
+                      <th className="px-4 py-3 font-medium text-muted-foreground">Kapatıcı</th>
+                      <th className="px-4 py-3 font-medium text-muted-foreground">Tutar</th>
+                      <th className="px-4 py-3 font-medium text-muted-foreground">Durum</th>
+                      <th className="px-4 py-3 font-medium text-muted-foreground">Para Kime</th>
+                      <th className="px-4 py-3 font-medium text-muted-foreground">Açıklama</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedDaySales.map((s) => (
+                      <tr key={s.id} className="border-t border-border transition-colors hover:bg-muted/30">
+                        <td className="px-4 py-2.5 text-muted-foreground">
+                          {s.sale_date_display ??
+                            new Date(s.sale_date).toLocaleString("tr-TR", {
+                              timeZone: "Europe/Istanbul",
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "2-digit",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                        </td>
+                        <td className="px-4 py-2.5 uppercase">{s.user_name ?? "-"}</td>
+                        <td className="px-4 py-2.5 uppercase">{s.closer_name ?? "-"}</td>
+                        <td className="px-4 py-2.5 font-medium text-primary">{formatNumberTr(Number(s.amount))} ₺</td>
+                        <td className="px-4 py-2.5">
+                          <span
+                            className={cn(
+                              "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
+                              s.status === "onay" ? "bg-primary/15 text-primary" : "bg-destructive/15 text-destructive"
+                            )}
+                          >
+                            {s.status === "onay" ? "Onay" : "Patladı"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 uppercase">{s.recipient_name ?? "-"}</td>
+                        <td className="max-w-xs truncate px-4 py-2.5 text-muted-foreground" title={s.description ?? ""}>
+                          {s.description ?? "-"}
+                        </td>
+                      </tr>
+                    ))}
+                    {selectedDaySales.length === 0 && (
+                      <tr>
+                        <td className="px-4 py-8 text-center text-muted-foreground" colSpan={7}>
+                          Bu güne ait satış yok.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </CardContent>
           </Card>
         )}
