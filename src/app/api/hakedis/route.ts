@@ -1,26 +1,10 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { fetchTryPerUsd } from "@/lib/frankfurter";
 
 /** Her istekte güncel kur (önbellek yok). */
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
-type Frankfurter = { rates?: { TRY?: number }; date?: string };
-
-async function fetchTryPerUsd(): Promise<{ tryPerUsd: number; fxDate: string | null; error?: string }> {
-  try {
-    const res = await fetch("https://api.frankfurter.app/latest?from=USD&to=TRY", {
-      cache: "no-store",
-    });
-    if (!res.ok) return { tryPerUsd: 0, fxDate: null, error: "fx_unavailable" };
-    const data = (await res.json()) as Frankfurter;
-    const tryPerUsd = data.rates?.TRY;
-    if (!tryPerUsd || tryPerUsd <= 0) return { tryPerUsd: 0, fxDate: null, error: "fx_invalid" };
-    return { tryPerUsd, fxDate: data.date ?? null };
-  } catch {
-    return { tryPerUsd: 0, fxDate: null, error: "fx_fetch_failed" };
-  }
-}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);

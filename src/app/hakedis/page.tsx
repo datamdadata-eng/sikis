@@ -270,22 +270,6 @@ export default function HakedisPage() {
           </div>
         </div>
 
-        {data && data.tryPerUsd > 0 && (
-          <Card className="mb-6 border-border/80 bg-muted/20">
-            <CardContent className="flex flex-wrap items-center gap-2 py-3 text-sm text-muted-foreground">
-              <CircleDollarSign className="size-4 text-primary" />
-              <span>
-                Güncel kur (Frankfurter, her yüklemede API):{" "}
-                <strong className="text-foreground">1 USD = {formatNumberTr(data.tryPerUsd)} ₺</strong>
-                {data.fxDate && <span className="ml-1">({data.fxDate})</span>}
-              </span>
-            </CardContent>
-          </Card>
-        )}
-        {data?.fxError && data.tryPerUsd <= 0 && (
-          <p className="mb-4 text-xs text-amber-600">Dolar kuru alınamadı; sadece TL gösteriliyor.</p>
-        )}
-
         {loading ? (
           <div className="flex justify-center py-16">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
