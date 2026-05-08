@@ -393,8 +393,9 @@ export default function HakedisPage() {
                   <CardHeader className="pb-2">
                     <CardTitle className="text-lg">Kişi hakedişi</CardTitle>
                     <p className="text-xs text-muted-foreground">
-                      Ciro: bu hafta satış yapan + kapatıcı toplamı. <strong className="text-foreground">Hakediş %</strong>{" "}
-                      kullanıcıda sabittir; bir kez kaydedilir, her hafta aynı oranla tutar hesaplanır (ciro × % ÷ 100).
+                      <strong className="text-foreground">Haftalık ciro</strong> aynı satışta hem açıp hem kapattıysanız tutarı
+                      bir kez gösterir. <strong className="text-foreground">Hakediş tutarı</strong> bu satırlarda iki rol matrahı
+                      (2×) üzerinden hesaplanır; % kullanıcıda sabittir.
                     </p>
                   </CardHeader>
                   <CardContent className="space-y-0 p-0">

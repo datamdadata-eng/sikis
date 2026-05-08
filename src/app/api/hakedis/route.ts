@@ -32,12 +32,19 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "week_bounds" }, { status: 500 });
   }
 
-  let personRows: { user_id: number; user_name: string; total_amount: string; default_hakedis_percent: string }[] = [];
+  let personRows: {
+    user_id: number;
+    user_name: string;
+    total_amount: string;
+    hakedis_base_amount: string;
+    default_hakedis_percent: string;
+  }[] = [];
   try {
     const pr = await query<{
       user_id: number;
       user_name: string;
       total_amount: string;
+      hakedis_base_amount: string;
       default_hakedis_percent: string;
     }>(
       `
@@ -60,18 +67,34 @@ export async function GET(request: Request) {
                 THEN s.amount
               ELSE 0
             END
-          ) AS amt
+          ) AS amt_display,
+          SUM(
+            CASE
+              WHEN s.user_id IS NOT NULL
+                   AND s.closer_user_id IS NOT NULL
+                   AND s.user_id = s.closer_user_id
+                   AND u.id = s.user_id
+                THEN 2 * s.amount
+              WHEN s.user_id = u.id
+                   AND (s.closer_user_id IS NULL OR s.closer_user_id IS DISTINCT FROM s.user_id)
+                THEN s.amount
+              WHEN s.closer_user_id = u.id AND s.user_id IS DISTINCT FROM s.closer_user_id
+                THEN s.amount
+              ELSE 0
+            END
+          ) AS amt_hakedis
         FROM sales s
         INNER JOIN users u ON u.id = s.user_id OR u.id = s.closer_user_id
         WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date >= $1::date
           AND (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date <= $2::date
         GROUP BY u.id, u.name, u.default_hakedis_percent
       )
-      SELECT c.user_id, c.user_name, c.amt::text AS total_amount,
+      SELECT c.user_id, c.user_name, c.amt_display::text AS total_amount,
+             c.amt_hakedis::text AS hakedis_base_amount,
              COALESCE(c.default_hakedis_percent, 0)::text AS default_hakedis_percent
       FROM contrib c
-      WHERE c.amt > 0
-      ORDER BY c.amt DESC NULLS LAST
+      WHERE c.amt_display > 0
+      ORDER BY c.amt_display DESC NULLS LAST
       `,
       [weekStart, weekEnd]
     );
@@ -79,7 +102,12 @@ export async function GET(request: Request) {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (/default_hakedis_percent/i.test(msg)) {
-      const pr = await query<{ user_id: number; user_name: string; total_amount: string }>(
+      const pr = await query<{
+        user_id: number;
+        user_name: string;
+        total_amount: string;
+        hakedis_base_amount: string;
+      }>(
         `
         WITH contrib AS (
           SELECT
@@ -99,17 +127,33 @@ export async function GET(request: Request) {
                   THEN s.amount
                 ELSE 0
               END
-            ) AS amt
+            ) AS amt_display,
+            SUM(
+              CASE
+                WHEN s.user_id IS NOT NULL
+                     AND s.closer_user_id IS NOT NULL
+                     AND s.user_id = s.closer_user_id
+                     AND u.id = s.user_id
+                  THEN 2 * s.amount
+                WHEN s.user_id = u.id
+                     AND (s.closer_user_id IS NULL OR s.closer_user_id IS DISTINCT FROM s.user_id)
+                  THEN s.amount
+                WHEN s.closer_user_id = u.id AND s.user_id IS DISTINCT FROM s.closer_user_id
+                  THEN s.amount
+                ELSE 0
+              END
+            ) AS amt_hakedis
           FROM sales s
           INNER JOIN users u ON u.id = s.user_id OR u.id = s.closer_user_id
           WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date >= $1::date
             AND (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date <= $2::date
           GROUP BY u.id, u.name
         )
-        SELECT c.user_id, c.user_name, c.amt::text AS total_amount
+        SELECT c.user_id, c.user_name, c.amt_display::text AS total_amount,
+               c.amt_hakedis::text AS hakedis_base_amount
         FROM contrib c
-        WHERE c.amt > 0
-        ORDER BY c.amt DESC NULLS LAST
+        WHERE c.amt_display > 0
+        ORDER BY c.amt_display DESC NULLS LAST
         `,
         [weekStart, weekEnd]
       );
@@ -172,9 +216,9 @@ export async function GET(request: Request) {
   const arsimetHakedisTry = (weekTotalNum * arsimetPercent) / 100;
 
   const people = personRows.map((row) => {
-    const ciro = Number(row.total_amount);
     const rate = Number(row.default_hakedis_percent ?? 0);
-    const hk = (ciro * rate) / 100;
+    const hakedisBase = Number(row.hakedis_base_amount ?? row.total_amount);
+    const hk = (hakedisBase * rate) / 100;
     return {
       user_id: row.user_id,
       user_name: row.user_name,
