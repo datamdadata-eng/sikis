@@ -96,6 +96,54 @@ export async function GET(request: Request) {
 
   const fx = await fetchTryPerUsd();
 
+  let weekTotalTry = "0";
+  try {
+    const wt = await query<{ t: string }>(
+      `
+      SELECT COALESCE(SUM(s.amount), 0)::text AS t
+      FROM sales s
+      WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date >= $1::date
+        AND (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date <= $2::date
+    `,
+      [weekStart, weekEnd]
+    );
+    weekTotalTry = wt.rows[0]?.t ?? "0";
+  } catch (e) {
+    console.error("[hakedis GET week total]", e);
+  }
+
+  let weekTotalPercent = 0;
+  let jinPercent = 0;
+  let arsimetPercent = 0;
+  try {
+    const ex = await query<{
+      week_total_percent: string;
+      jin_percent: string;
+      arsimet_percent: string;
+    }>(
+      `
+      SELECT week_total_percent::text, jin_percent::text, arsimet_percent::text
+      FROM hakedis_week_extras
+      WHERE week_start = $1::date
+    `,
+      [weekStart]
+    );
+    if (ex.rows[0]) {
+      weekTotalPercent = Number(ex.rows[0].week_total_percent);
+      jinPercent = Number(ex.rows[0].jin_percent);
+      arsimetPercent = Number(ex.rows[0].arsimet_percent);
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!/hakedis_week_extras/i.test(msg) || !/does not exist/i.test(msg)) {
+      console.error("[hakedis GET extras]", e);
+    }
+  }
+
+  const weekTotalNum = Number(weekTotalTry);
+  const jinHakedisTry = (weekTotalNum * jinPercent) / 100;
+  const arsimetHakedisTry = (weekTotalNum * arsimetPercent) / 100;
+
   const users = userRows.rows.map((row) => {
     const total = Number(row.total_amount);
     const percentage = rateMap.get(`${row.user_id}:sales`) ?? 0;
@@ -124,6 +172,14 @@ export async function GET(request: Request) {
     weekOffset,
     users,
     closers,
+    extras: {
+      weekTotalTry,
+      weekTotalPercent,
+      jinPercent,
+      arsimetPercent,
+      jinHakedisTry: jinHakedisTry.toFixed(2),
+      arsimetHakedisTry: arsimetHakedisTry.toFixed(2),
+    },
     tryPerUsd: fx.tryPerUsd,
     fxDate: fx.fxDate,
     fxError: fx.error ?? null,

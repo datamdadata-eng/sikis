@@ -96,6 +96,16 @@ export async function POST() {
     `);
 
     await query(`
+      CREATE TABLE IF NOT EXISTS hakedis_week_extras (
+        week_start DATE NOT NULL PRIMARY KEY,
+        week_total_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
+        jin_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
+        arsimet_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
+        updated_at TIMESTAMPTZ DEFAULT now()
+      );
+    `);
+
+    await query(`
       CREATE TABLE IF NOT EXISTS debt_reductions (
         id SERIAL PRIMARY KEY,
         person_name TEXT NOT NULL,

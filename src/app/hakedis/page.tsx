@@ -6,6 +6,7 @@ import { Package, LogOut, Calendar, Banknote, ChevronLeft, ChevronRight, CircleD
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,12 +35,22 @@ type CloserRow = {
   hakedis_try: string;
 };
 
+type HakedisExtras = {
+  weekTotalTry: string;
+  weekTotalPercent: number;
+  jinPercent: number;
+  arsimetPercent: number;
+  jinHakedisTry: string;
+  arsimetHakedisTry: string;
+};
+
 type HakedisData = {
   weekStart: string;
   weekEnd: string;
   weekOffset: number;
   users: SalesRow[];
   closers: CloserRow[];
+  extras?: HakedisExtras;
   tryPerUsd: number;
   fxDate: string | null;
   fxError: string | null;
@@ -127,6 +138,42 @@ export default function HakedisPage() {
           userId: opts.userId,
           role: opts.role,
           percentage: opts.percentage,
+        }),
+      });
+      if (res.ok) {
+        const refresh = await fetch(`/api/hakedis?weekOffset=${weekOffset}`, { cache: "no-store" });
+        if (refresh.ok) setData(await refresh.json());
+      }
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const saveExtras = async (partial: {
+    weekTotalPercent?: number;
+    jinPercent?: number;
+    arsimetPercent?: number;
+  }) => {
+    if (!data) return;
+    const token = typeof window !== "undefined" ? window.localStorage.getItem("satistakip-token") : null;
+    if (!token) return;
+    const sk =
+      partial.weekTotalPercent !== undefined
+        ? "extras:week"
+        : partial.jinPercent !== undefined
+          ? "extras:jin"
+          : "extras:arsimet";
+    setSavingKey(sk);
+    try {
+      const res = await fetch("/api/hakedis/extras", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          weekStart: data.weekStart,
+          ...partial,
         }),
       });
       if (res.ok) {
@@ -261,7 +308,119 @@ export default function HakedisPage() {
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           </div>
         ) : data ? (
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="space-y-6">
+            {(() => {
+              const ex = data.extras ?? {
+                weekTotalTry: "0",
+                weekTotalPercent: 0,
+                jinPercent: 0,
+                arsimetPercent: 0,
+                jinHakedisTry: "0",
+                arsimetHakedisTry: "0",
+              };
+              const wtt = Number(ex.weekTotalTry);
+              const usdWeek = tryToUsd(wtt);
+              return (
+                <Card className="border-primary/25">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">JIN · ARSIMET · hafta toplamı</CardTitle>
+                    <p className="text-xs text-muted-foreground">
+                      Bu haftanın <strong className="text-foreground">tüm satış</strong> toplamı üzerinden JIN ve ARSIMET
+                      hakediş yüzdesi. Ayrıca haftalık kayıt için toplam % alanı (hesaba katılmaz, sizin notunuz).
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm">
+                      <p className="text-muted-foreground">Hafta satış toplamı (tüm satırlar)</p>
+                      <p className="text-xl font-bold text-primary">{formatNumberTr(wtt)} ₺</p>
+                      {usdWeek != null && (
+                        <p className="text-xs text-muted-foreground">{formatUsd(usdWeek)}</p>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Haftalık toplam % (kayıt)</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={0.01}
+                          className="h-9 w-28"
+                          defaultValue={ex.weekTotalPercent}
+                          key={`${data.weekStart}-week-total-${ex.weekTotalPercent}`}
+                          disabled={savingKey === "extras:week"}
+                          onBlur={(e) => {
+                            const v = Number(e.target.value);
+                            if (Number.isNaN(v) || v < 0 || v > 100) {
+                              e.target.value = String(ex.weekTotalPercent);
+                              return;
+                            }
+                            if (Math.abs(v - ex.weekTotalPercent) < 1e-6) return;
+                            void saveExtras({ weekTotalPercent: v });
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="hidden border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_5.5rem_minmax(0,1fr)] sm:items-center sm:gap-3">
+                      <span>İsim</span>
+                      <span className="text-right">Haftalık ciro (toplam)</span>
+                      <span className="text-center">Hakediş %</span>
+                      <span className="text-right">Hakediş tutarı</span>
+                    </div>
+                    {(["JIN", "ARSIMET"] as const).map((name, idx) => {
+                      const pct = name === "JIN" ? ex.jinPercent : ex.arsimetPercent;
+                      const hk = name === "JIN" ? Number(ex.jinHakedisTry) : Number(ex.arsimetHakedisTry);
+                      const saveKey = name === "JIN" ? "extras:jin" : "extras:arsimet";
+                      const usdHakedis = tryToUsd(hk);
+                      return (
+                        <div
+                          key={name}
+                          className={`flex flex-col gap-3 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_5.5rem_minmax(0,1fr)] sm:items-center sm:gap-3 ${idx > 0 ? "border-t border-border" : ""}`}
+                        >
+                          <span className="font-semibold uppercase text-foreground">{name}</span>
+                          <div className="flex flex-wrap items-center justify-between gap-2 sm:block sm:text-right">
+                            <span className="text-xs text-muted-foreground sm:hidden">Ciro</span>
+                            <p className="font-bold text-primary">{formatNumberTr(wtt)} ₺</p>
+                            {usdWeek != null && (
+                              <p className="text-xs text-muted-foreground sm:text-right">{formatUsd(usdWeek)}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground sm:hidden">Hakediş %</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.01}
+                              className="h-9 w-24"
+                              defaultValue={pct}
+                              key={`${data.weekStart}-${name}-${pct}`}
+                              disabled={savingKey === saveKey}
+                              onBlur={(e) => {
+                                const v = Number(e.target.value);
+                                if (Number.isNaN(v) || v < 0 || v > 100) {
+                                  e.target.value = String(pct);
+                                  return;
+                                }
+                                if (Math.abs(v - pct) < 1e-6) return;
+                                void saveExtras(name === "JIN" ? { jinPercent: v } : { arsimetPercent: v });
+                              }}
+                            />
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-semibold text-foreground">{formatNumberTr(hk)} ₺</p>
+                            {usdHakedis != null && (
+                              <p className="text-xs text-muted-foreground">{formatUsd(usdHakedis)}</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              );
+            })()}
+            <div className="grid gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-lg">Satış yapan</CardTitle>
@@ -413,6 +572,7 @@ export default function HakedisPage() {
                 </div>
               </CardContent>
             </Card>
+            </div>
           </div>
         ) : (
           <p className="text-muted-foreground">Veri yüklenemedi.</p>
