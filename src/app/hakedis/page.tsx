@@ -170,6 +170,10 @@ export default function HakedisPage() {
   const totalClosersTry =
     data?.closers.reduce((s, r) => s + Number(r.total_amount ?? 0), 0) ?? 0;
 
+  /** Hakediş tutarının haftanın tüm satış cirosuna oranı (%) */
+  const hakedisOfWeekTotalPct = (hakedisTry: number, weekTotalTry: number) =>
+    weekTotalTry > 0 ? (100 * hakedisTry) / weekTotalTry : 0;
+
   if (!loggedIn) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -237,9 +241,9 @@ export default function HakedisPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Hakediş</h1>
             <p className="text-sm text-muted-foreground">
-              Haftalık (İstanbul Pazartesi–Pazar): Satış yapan ve kapatıcı tek kutuda; her satırda grup içi pay % otomatik
-              (o grubun haftalık cirosuna göre). Her grubun kendi hakediş havuzu (₺) aynı oranla satırlara bölünür. JIN ve
-              ARSIMET, haftanın tüm satış toplamı üzerinden % ile hesaplanır; haftalık toplam % yalnızca kayıt / nottur.
+              Haftalık (İstanbul Pazartesi–Pazar): Satış yapan ve kapatıcı tek kutuda; her satırda grup içi % (havuzdaki
+              pay) ve hakediş tutarının haftanın tüm satış cirosuna oranı (%) gösterilir. Her grubun kendi hakediş havuzu
+              (₺) ciro payıyla bölünür. JIN ve ARSIMET hafta toplamı üzerinden %; haftalık toplam % yalnızca kayıt / nottur.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -298,6 +302,11 @@ export default function HakedisPage() {
             };
             const wtt = Number(ex.weekTotalTry);
             const usdWeek = tryToUsd(wtt);
+            const totalSalesHakedisTry = data.users.reduce((s, r) => s + Number(r.hakedis_try), 0);
+            const totalCloserHakedisTry = data.closers.reduce((s, r) => s + Number(r.hakedis_try), 0);
+            const weekHakedisGrandTry =
+              totalSalesHakedisTry + totalCloserHakedisTry + Number(ex.jinHakedisTry) + Number(ex.arsimetHakedisTry);
+            const usdWeekHakedisGrand = tryToUsd(weekHakedisGrandTry);
             return (
               <div className="space-y-6">
                 <Card className="border-primary/25">
@@ -438,11 +447,17 @@ export default function HakedisPage() {
                           />
                         </div>
                       </div>
-                      <div className="hidden border-y border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,1fr)] sm:items-center sm:gap-3 sm:px-6">
+                      <div className="hidden border-y border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)_minmax(0,4.25rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6">
                         <span>İsim</span>
                         <span className="text-right">Haftalık ciro</span>
-                        <span className="text-center" title="Bu grubun haftalık toplam cirosundaki pay">
-                          Grup içi %
+                        <span className="text-center" title="Kişinin cirosu / bu grubun ciro toplamı (hakediş payı)">
+                          Grup %
+                        </span>
+                        <span
+                          className="text-center"
+                          title="Kişinin hakediş tutarı / haftanın tüm satış cirosu (aynı hafta)"
+                        >
+                          Haftaya %
                         </span>
                         <span className="text-right">Hakediş</span>
                       </div>
@@ -455,10 +470,11 @@ export default function HakedisPage() {
                             const hk = Number(r.hakedis_try);
                             const usdCiro = tryToUsd(tl);
                             const usdHakedis = tryToUsd(hk);
+                            const hWeekPct = hakedisOfWeekTotalPct(hk, wtt);
                             return (
                               <div
                                 key={r.user_id}
-                                className="flex flex-col gap-3 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,1fr)] sm:items-center sm:gap-3 sm:px-6"
+                                className="flex flex-col gap-3 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)_minmax(0,4.25rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6"
                               >
                                 <span className="font-semibold uppercase text-foreground">{r.user_name}</span>
                                 <div className="flex flex-wrap items-center justify-between gap-2 sm:block sm:text-right">
@@ -469,9 +485,15 @@ export default function HakedisPage() {
                                   )}
                                 </div>
                                 <div className="text-center sm:text-center">
-                                  <span className="text-xs text-muted-foreground sm:hidden">Grup içi %</span>
+                                  <span className="text-xs text-muted-foreground sm:hidden">Grup %</span>
                                   <p className="text-sm font-medium tabular-nums text-foreground">
                                     {formatNumberTr(r.share_percent)} %
+                                  </p>
+                                </div>
+                                <div className="text-center sm:text-center">
+                                  <span className="text-xs text-muted-foreground sm:hidden">Haftaya %</span>
+                                  <p className="text-sm font-medium tabular-nums text-foreground">
+                                    {formatNumberTr(hWeekPct)} %
                                   </p>
                                 </div>
                                 <div className="text-right">
@@ -483,6 +505,26 @@ export default function HakedisPage() {
                               </div>
                             );
                           })
+                        )}
+                        {data.users.length > 0 && (
+                          <div className="flex flex-col gap-2 border-t border-border bg-muted/45 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)_minmax(0,4.25rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6">
+                            <span className="text-sm font-semibold text-foreground">Toplam (satış yapan)</span>
+                            <p className="text-right text-sm font-bold text-primary sm:text-right">
+                              {formatNumberTr(totalUsersTry)} ₺
+                            </p>
+                            <p className="text-center text-sm font-semibold tabular-nums text-foreground sm:text-center">
+                              {totalUsersTry > 0 ? "100" : "0"} %
+                            </p>
+                            <p className="text-center text-sm font-semibold tabular-nums text-foreground sm:text-center">
+                              {formatNumberTr(hakedisOfWeekTotalPct(totalSalesHakedisTry, wtt))} %
+                            </p>
+                            <div className="text-right">
+                              <p className="text-sm font-bold text-foreground">{formatNumberTr(totalSalesHakedisTry)} ₺</p>
+                              {tryToUsd(totalSalesHakedisTry) != null && (
+                                <p className="text-xs text-muted-foreground">{formatUsd(tryToUsd(totalSalesHakedisTry)!)}</p>
+                              )}
+                            </div>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -519,11 +561,17 @@ export default function HakedisPage() {
                           />
                         </div>
                       </div>
-                      <div className="hidden border-y border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,1fr)] sm:items-center sm:gap-3 sm:px-6">
+                      <div className="hidden border-y border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)_minmax(0,4.25rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6">
                         <span>İsim</span>
                         <span className="text-right">Haftalık ciro</span>
-                        <span className="text-center" title="Bu grubun haftalık toplam cirosundaki pay">
-                          Grup içi %
+                        <span className="text-center" title="Kişinin cirosu / bu grubun ciro toplamı (hakediş payı)">
+                          Grup %
+                        </span>
+                        <span
+                          className="text-center"
+                          title="Kişinin hakediş tutarı / haftanın tüm satış cirosu (aynı hafta)"
+                        >
+                          Haftaya %
                         </span>
                         <span className="text-right">Hakediş</span>
                       </div>
@@ -538,10 +586,11 @@ export default function HakedisPage() {
                             const hk = Number(r.hakedis_try);
                             const usdCiro = tryToUsd(tl);
                             const usdHakedis = tryToUsd(hk);
+                            const hWeekPct = hakedisOfWeekTotalPct(hk, wtt);
                             return (
                               <div
                                 key={r.closer_id}
-                                className="flex flex-col gap-3 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,1fr)] sm:items-center sm:gap-3 sm:px-6"
+                                className="flex flex-col gap-3 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)_minmax(0,4.25rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6"
                               >
                                 <span className="font-semibold uppercase text-foreground">{r.closer_name}</span>
                                 <div className="flex flex-wrap items-center justify-between gap-2 sm:block sm:text-right">
@@ -552,9 +601,15 @@ export default function HakedisPage() {
                                   )}
                                 </div>
                                 <div className="text-center sm:text-center">
-                                  <span className="text-xs text-muted-foreground sm:hidden">Grup içi %</span>
+                                  <span className="text-xs text-muted-foreground sm:hidden">Grup %</span>
                                   <p className="text-sm font-medium tabular-nums text-foreground">
                                     {formatNumberTr(r.share_percent)} %
+                                  </p>
+                                </div>
+                                <div className="text-center sm:text-center">
+                                  <span className="text-xs text-muted-foreground sm:hidden">Haftaya %</span>
+                                  <p className="text-sm font-medium tabular-nums text-foreground">
+                                    {formatNumberTr(hWeekPct)} %
                                   </p>
                                 </div>
                                 <div className="text-right">
@@ -567,6 +622,43 @@ export default function HakedisPage() {
                             );
                           })
                         )}
+                        {data.closers.length > 0 && (
+                          <div className="flex flex-col gap-2 border-t border-border bg-muted/45 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)_minmax(0,4.25rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6">
+                            <span className="text-sm font-semibold text-foreground">Toplam (kapatıcı)</span>
+                            <p className="text-right text-sm font-bold text-primary sm:text-right">
+                              {formatNumberTr(totalClosersTry)} ₺
+                            </p>
+                            <p className="text-center text-sm font-semibold tabular-nums text-foreground sm:text-center">
+                              {totalClosersTry > 0 ? "100" : "0"} %
+                            </p>
+                            <p className="text-center text-sm font-semibold tabular-nums text-foreground sm:text-center">
+                              {formatNumberTr(hakedisOfWeekTotalPct(totalCloserHakedisTry, wtt))} %
+                            </p>
+                            <div className="text-right">
+                              <p className="text-sm font-bold text-foreground">{formatNumberTr(totalCloserHakedisTry)} ₺</p>
+                              {tryToUsd(totalCloserHakedisTry) != null && (
+                                <p className="text-xs text-muted-foreground">{formatUsd(tryToUsd(totalCloserHakedisTry)!)}</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="border-t border-primary/20 bg-primary/5 px-4 py-4 sm:px-6">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">Bu hafta hakediş toplamı</p>
+                          <p className="text-xs text-muted-foreground">
+                            Satış yapan + Kapatıcı + JIN + ARSIMET (₺)
+                          </p>
+                        </div>
+                        <div className="text-left sm:text-right">
+                          <p className="text-xl font-bold tabular-nums text-primary">{formatNumberTr(weekHakedisGrandTry)} ₺</p>
+                          {usdWeekHakedisGrand != null && (
+                            <p className="text-xs text-muted-foreground">{formatUsd(usdWeekHakedisGrand)}</p>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </CardContent>
