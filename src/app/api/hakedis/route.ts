@@ -38,6 +38,41 @@ function splitPool(
   });
 }
 
+/** Kişi başı kayıtlı ağırlık % ile havuz bölünür; ağırlık toplamı 0 ise ciroya göre bölünür. */
+function splitByRatesOrCiro<R extends { total_amount: string }>(
+  rows: R[],
+  pool: number,
+  role: "sales" | "closer",
+  getId: (row: R) => number,
+  rateMap: Map<string, number>
+): { share_percent: number; hakedis_try: string; rate_percent: number }[] {
+  if (rows.length === 0) return [];
+  const rates = rows.map((row) => {
+    const id = getId(row);
+    return rateMap.get(`${id}:${role}`) ?? 0;
+  });
+  const sumR = rates.reduce((a, b) => a + b, 0);
+  if (sumR <= 0) {
+    const grand = rows.reduce((s, r) => s + Number(r.total_amount), 0);
+    const ciro = splitPool(rows, grand, pool);
+    return rows.map((_, i) => ({
+      share_percent: ciro[i]?.share_percent ?? 0,
+      hakedis_try: ciro[i]?.hakedis_try ?? "0.00",
+      rate_percent: Number((rates[i] ?? 0).toFixed(2)),
+    }));
+  }
+  return rows.map((_, i) => {
+    const rate = rates[i] ?? 0;
+    const share = (100 * rate) / sumR;
+    const hk = (pool * rate) / sumR;
+    return {
+      share_percent: Number(share.toFixed(4)),
+      hakedis_try: hk.toFixed(2),
+      rate_percent: Number(rate.toFixed(2)),
+    };
+  });
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const weekOffset = Math.min(52, Math.max(-52, parseInt(searchParams.get("weekOffset") || "0", 10) || 0));
@@ -90,9 +125,6 @@ export async function GET(request: Request) {
       [weekStart, weekEnd]
     ),
   ]);
-
-  const salesGrand = userRows.rows.reduce((s, r) => s + Number(r.total_amount), 0);
-  const closerGrand = closerRows.rows.reduce((s, r) => s + Number(r.total_amount), 0);
 
   const fx = await fetchTryPerUsd();
 
@@ -174,17 +206,37 @@ export async function GET(request: Request) {
   const jinHakedisTry = (weekTotalNum * jinPercent) / 100;
   const arsimetHakedisTry = (weekTotalNum * arsimetPercent) / 100;
 
-  const salesSplits = splitPool(userRows.rows, salesGrand, salesHakedisPoolTry);
-  const closerSplits = splitPool(closerRows.rows, closerGrand, closerHakedisPoolTry);
+  const rateMap = new Map<string, number>();
+  try {
+    const rr = await query<{ user_id: number; role: string; rate_percent: string }>(
+      `SELECT user_id, role, rate_percent::text FROM hakedis_week_user_rate WHERE week_start = $1::date`,
+      [weekStart]
+    );
+    for (const row of rr.rows) {
+      if (row.role === "sales" || row.role === "closer") {
+        rateMap.set(`${row.user_id}:${row.role}`, Number(row.rate_percent));
+      }
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!/hakedis_week_user_rate/i.test(msg) || !/does not exist/i.test(msg)) {
+      console.error("[hakedis GET rates]", e);
+    }
+  }
+
+  const salesSplits = splitByRatesOrCiro(userRows.rows, salesHakedisPoolTry, "sales", (r) => r.user_id, rateMap);
+  const closerSplits = splitByRatesOrCiro(closerRows.rows, closerHakedisPoolTry, "closer", (r) => r.closer_id, rateMap);
 
   const users = userRows.rows.map((row, i) => ({
     ...row,
+    rate_percent: salesSplits[i]?.rate_percent ?? 0,
     share_percent: salesSplits[i]?.share_percent ?? 0,
     hakedis_try: salesSplits[i]?.hakedis_try ?? "0.00",
   }));
 
   const closers = closerRows.rows.map((row, i) => ({
     ...row,
+    rate_percent: closerSplits[i]?.rate_percent ?? 0,
     share_percent: closerSplits[i]?.share_percent ?? 0,
     hakedis_try: closerSplits[i]?.hakedis_try ?? "0.00",
   }));

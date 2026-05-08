@@ -36,7 +36,8 @@ export async function POST(request: Request) {
   if (!Number.isInteger(userId) || userId < 1) {
     return NextResponse.json({ error: "invalid_user" }, { status: 400 });
   }
-  if (Number.isNaN(percentage) || percentage < 0 || percentage > 100) {
+  /** Havuz ağırlığı (0–9999,99); toplamı 100 olmak zorunda değil, havuz orantılı bölünür. */
+  if (Number.isNaN(percentage) || percentage < 0 || percentage > 9999.99) {
     return NextResponse.json({ error: "invalid_percentage" }, { status: 400 });
   }
 

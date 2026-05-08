@@ -23,6 +23,9 @@ type SalesRow = {
   user_id: number;
   user_name: string;
   total_amount: string;
+  /** Kayıtlı havuz ağırlığı (yüzde / puan); toplamı 100 olmak zorunda değil */
+  rate_percent: number;
+  /** Havuzdan gerçekleşen pay % (ağırlıklara göre orantılı) veya ağırlık yoksa ciro payı */
   share_percent: number;
   hakedis_try: string;
 };
@@ -31,6 +34,7 @@ type CloserRow = {
   closer_id: number;
   closer_name: string;
   total_amount: string;
+  rate_percent: number;
   share_percent: number;
   hakedis_try: string;
 };
@@ -170,9 +174,38 @@ export default function HakedisPage() {
   const totalClosersTry =
     data?.closers.reduce((s, r) => s + Number(r.total_amount ?? 0), 0) ?? 0;
 
-  /** Hakediş tutarının haftanın tüm satış cirosuna oranı (%) */
-  const hakedisOfWeekTotalPct = (hakedisTry: number, weekTotalTry: number) =>
-    weekTotalTry > 0 ? (100 * hakedisTry) / weekTotalTry : 0;
+  const saveRate = async (opts: {
+    weekStart: string;
+    userId: number;
+    role: "sales" | "closer";
+    percentage: number;
+  }) => {
+    const token = typeof window !== "undefined" ? window.localStorage.getItem("satistakip-token") : null;
+    if (!token) return;
+    const key = `${opts.userId}:${opts.role}`;
+    setSavingKey(key);
+    try {
+      const res = await fetch("/api/hakedis/rate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          weekStart: opts.weekStart,
+          userId: opts.userId,
+          role: opts.role,
+          percentage: opts.percentage,
+        }),
+      });
+      if (res.ok) {
+        const refresh = await fetch(`/api/hakedis?weekOffset=${weekOffset}`, { cache: "no-store" });
+        if (refresh.ok) setData(await refresh.json());
+      }
+    } finally {
+      setSavingKey(null);
+    }
+  };
 
   if (!loggedIn) {
     return (
@@ -241,9 +274,10 @@ export default function HakedisPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Hakediş</h1>
             <p className="text-sm text-muted-foreground">
-              Haftalık (İstanbul Pazartesi–Pazar): Satış yapan ve kapatıcı tek kutuda; her satırda grup içi % (havuzdaki
-              pay) ve hakediş tutarının haftanın tüm satış cirosuna oranı (%) gösterilir. Her grubun kendi hakediş havuzu
-              (₺) ciro payıyla bölünür. JIN ve ARSIMET hafta toplamı üzerinden %; haftalık toplam % yalnızca kayıt / nottur.
+              Haftalık (İstanbul Pazartesi–Pazar): Açıcı (satış yapan) ve kapatıcı için her kişiye{" "}
+              <strong className="text-foreground">hakediş ağırlığı %</strong> girersiniz; havuz bu ağırlıklara orantılı
+              bölünür (toplamı 100 olmak zorunda değil). Ağırlıkların hepsi 0 ise dağıtım o grubun cirosuna göre yapılır.
+              JIN ve ARSIMET hafta toplamı üzerinden %; haftalık toplam % yalnızca kayıt / nottur.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -304,6 +338,8 @@ export default function HakedisPage() {
             const usdWeek = tryToUsd(wtt);
             const totalSalesHakedisTry = data.users.reduce((s, r) => s + Number(r.hakedis_try), 0);
             const totalCloserHakedisTry = data.closers.reduce((s, r) => s + Number(r.hakedis_try), 0);
+            const sumSalesRates = data.users.reduce((s, r) => s + Number(r.rate_percent ?? 0), 0);
+            const sumCloserRates = data.closers.reduce((s, r) => s + Number(r.rate_percent ?? 0), 0);
             const weekHakedisGrandTry =
               totalSalesHakedisTry + totalCloserHakedisTry + Number(ex.jinHakedisTry) + Number(ex.arsimetHakedisTry);
             const usdWeekHakedisGrand = tryToUsd(weekHakedisGrandTry);
@@ -408,16 +444,16 @@ export default function HakedisPage() {
                 </Card>
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg">Satış yapan · Kapatıcı</CardTitle>
+                    <CardTitle className="text-lg">Açıcı (satış yapan) · Kapatıcı</CardTitle>
                     <p className="text-xs text-muted-foreground">
-                      Her grup kendi haftalık ciro toplamı ve kendi hakediş havuzu (₺) ile hesaplanır; satırlar grup içinde
-                      oransal paylaşır.
+                      Her grubun hakediş havuzu (₺), satırdaki <strong className="text-foreground">ağırlık %</strong>{" "}
+                      oranında bölünür. Ağırlık toplamı 0 ise o grupta dağıtım ciroya göre yapılır. Ciro bilgi amaçlıdır.
                     </p>
                   </CardHeader>
                   <CardContent className="space-y-0 p-0">
                     <div className="border-b border-border">
                       <div className="space-y-3 px-4 pb-3 pt-1 sm:px-6">
-                        <h3 className="text-sm font-semibold text-foreground">Satış yapan</h3>
+                        <h3 className="text-sm font-semibold text-foreground">Açıcı (satış yapan)</h3>
                         <p className="text-xs text-muted-foreground">
                           Grup ciro toplamı: {formatNumberTr(totalUsersTry)} ₺.
                         </p>
@@ -447,17 +483,14 @@ export default function HakedisPage() {
                           />
                         </div>
                       </div>
-                      <div className="hidden border-y border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)_minmax(0,4.25rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6">
+                      <div className="hidden border-y border-border bg-muted/40 px-4 py-2 text-[11px] font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,4.5rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6">
                         <span>İsim</span>
                         <span className="text-right">Haftalık ciro</span>
-                        <span className="text-center" title="Kişinin cirosu / bu grubun ciro toplamı (hakediş payı)">
-                          Grup %
+                        <span className="text-center" title="Havuzdan alınacak payı belirleyen ağırlık (kayıtlı)">
+                          Ağırlık %
                         </span>
-                        <span
-                          className="text-center"
-                          title="Kişinin hakediş tutarı / haftanın tüm satış cirosu (aynı hafta)"
-                        >
-                          Haftaya %
+                        <span className="text-center" title="Havuzun bu kişiye düşen oranı (hesaplanan)">
+                          Havuz payı %
                         </span>
                         <span className="text-right">Hakediş</span>
                       </div>
@@ -470,11 +503,11 @@ export default function HakedisPage() {
                             const hk = Number(r.hakedis_try);
                             const usdCiro = tryToUsd(tl);
                             const usdHakedis = tryToUsd(hk);
-                            const hWeekPct = hakedisOfWeekTotalPct(hk, wtt);
+                            const saveKey = `${r.user_id}:sales`;
                             return (
                               <div
                                 key={r.user_id}
-                                className="flex flex-col gap-3 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)_minmax(0,4.25rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6"
+                                className="flex flex-col gap-3 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,4.5rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6"
                               >
                                 <span className="font-semibold uppercase text-foreground">{r.user_name}</span>
                                 <div className="flex flex-wrap items-center justify-between gap-2 sm:block sm:text-right">
@@ -484,16 +517,37 @@ export default function HakedisPage() {
                                     <p className="text-xs text-muted-foreground sm:text-right">{formatUsd(usdCiro)}</p>
                                   )}
                                 </div>
-                                <div className="text-center sm:text-center">
-                                  <span className="text-xs text-muted-foreground sm:hidden">Grup %</span>
-                                  <p className="text-sm font-medium tabular-nums text-foreground">
-                                    {formatNumberTr(r.share_percent)} %
-                                  </p>
+                                <div className="flex items-center justify-center gap-2 sm:justify-center">
+                                  <span className="text-xs text-muted-foreground sm:hidden">Ağırlık %</span>
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    max={9999.99}
+                                    step={0.01}
+                                    className="h-9 w-20"
+                                    defaultValue={r.rate_percent}
+                                    key={`${data.weekStart}-${r.user_id}-sales-rate-${r.rate_percent}`}
+                                    disabled={savingKey === saveKey}
+                                    onBlur={(e) => {
+                                      const v = Number(e.target.value);
+                                      if (Number.isNaN(v) || v < 0 || v > 9999.99) {
+                                        e.target.value = String(r.rate_percent);
+                                        return;
+                                      }
+                                      if (Math.abs(v - r.rate_percent) < 1e-6) return;
+                                      void saveRate({
+                                        weekStart: data.weekStart,
+                                        userId: r.user_id,
+                                        role: "sales",
+                                        percentage: v,
+                                      });
+                                    }}
+                                  />
                                 </div>
                                 <div className="text-center sm:text-center">
-                                  <span className="text-xs text-muted-foreground sm:hidden">Haftaya %</span>
+                                  <span className="text-xs text-muted-foreground sm:hidden">Havuz payı %</span>
                                   <p className="text-sm font-medium tabular-nums text-foreground">
-                                    {formatNumberTr(hWeekPct)} %
+                                    {formatNumberTr(r.share_percent)} %
                                   </p>
                                 </div>
                                 <div className="text-right">
@@ -507,16 +561,16 @@ export default function HakedisPage() {
                           })
                         )}
                         {data.users.length > 0 && (
-                          <div className="flex flex-col gap-2 border-t border-border bg-muted/45 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)_minmax(0,4.25rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6">
-                            <span className="text-sm font-semibold text-foreground">Toplam (satış yapan)</span>
+                          <div className="flex flex-col gap-2 border-t border-border bg-muted/45 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,4.5rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6">
+                            <span className="text-sm font-semibold text-foreground">Toplam (açıcı)</span>
                             <p className="text-right text-sm font-bold text-primary sm:text-right">
                               {formatNumberTr(totalUsersTry)} ₺
                             </p>
                             <p className="text-center text-sm font-semibold tabular-nums text-foreground sm:text-center">
-                              {totalUsersTry > 0 ? "100" : "0"} %
+                              {formatNumberTr(sumSalesRates)}
                             </p>
                             <p className="text-center text-sm font-semibold tabular-nums text-foreground sm:text-center">
-                              {formatNumberTr(hakedisOfWeekTotalPct(totalSalesHakedisTry, wtt))} %
+                              {sumSalesRates > 0 ? "100" : totalUsersTry > 0 ? "100" : "0"} %
                             </p>
                             <div className="text-right">
                               <p className="text-sm font-bold text-foreground">{formatNumberTr(totalSalesHakedisTry)} ₺</p>
@@ -561,17 +615,14 @@ export default function HakedisPage() {
                           />
                         </div>
                       </div>
-                      <div className="hidden border-y border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)_minmax(0,4.25rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6">
+                      <div className="hidden border-y border-border bg-muted/40 px-4 py-2 text-[11px] font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,4.5rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6">
                         <span>İsim</span>
                         <span className="text-right">Haftalık ciro</span>
-                        <span className="text-center" title="Kişinin cirosu / bu grubun ciro toplamı (hakediş payı)">
-                          Grup %
+                        <span className="text-center" title="Havuzdan alınacak payı belirleyen ağırlık (kayıtlı)">
+                          Ağırlık %
                         </span>
-                        <span
-                          className="text-center"
-                          title="Kişinin hakediş tutarı / haftanın tüm satış cirosu (aynı hafta)"
-                        >
-                          Haftaya %
+                        <span className="text-center" title="Havuzun bu kişiye düşen oranı (hesaplanan)">
+                          Havuz payı %
                         </span>
                         <span className="text-right">Hakediş</span>
                       </div>
@@ -586,11 +637,11 @@ export default function HakedisPage() {
                             const hk = Number(r.hakedis_try);
                             const usdCiro = tryToUsd(tl);
                             const usdHakedis = tryToUsd(hk);
-                            const hWeekPct = hakedisOfWeekTotalPct(hk, wtt);
+                            const saveKey = `${r.closer_id}:closer`;
                             return (
                               <div
                                 key={r.closer_id}
-                                className="flex flex-col gap-3 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)_minmax(0,4.25rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6"
+                                className="flex flex-col gap-3 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,4.5rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6"
                               >
                                 <span className="font-semibold uppercase text-foreground">{r.closer_name}</span>
                                 <div className="flex flex-wrap items-center justify-between gap-2 sm:block sm:text-right">
@@ -600,16 +651,37 @@ export default function HakedisPage() {
                                     <p className="text-xs text-muted-foreground sm:text-right">{formatUsd(usdCiro)}</p>
                                   )}
                                 </div>
-                                <div className="text-center sm:text-center">
-                                  <span className="text-xs text-muted-foreground sm:hidden">Grup %</span>
-                                  <p className="text-sm font-medium tabular-nums text-foreground">
-                                    {formatNumberTr(r.share_percent)} %
-                                  </p>
+                                <div className="flex items-center justify-center gap-2 sm:justify-center">
+                                  <span className="text-xs text-muted-foreground sm:hidden">Ağırlık %</span>
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    max={9999.99}
+                                    step={0.01}
+                                    className="h-9 w-20"
+                                    defaultValue={r.rate_percent}
+                                    key={`${data.weekStart}-${r.closer_id}-closer-rate-${r.rate_percent}`}
+                                    disabled={savingKey === saveKey}
+                                    onBlur={(e) => {
+                                      const v = Number(e.target.value);
+                                      if (Number.isNaN(v) || v < 0 || v > 9999.99) {
+                                        e.target.value = String(r.rate_percent);
+                                        return;
+                                      }
+                                      if (Math.abs(v - r.rate_percent) < 1e-6) return;
+                                      void saveRate({
+                                        weekStart: data.weekStart,
+                                        userId: r.closer_id,
+                                        role: "closer",
+                                        percentage: v,
+                                      });
+                                    }}
+                                  />
                                 </div>
                                 <div className="text-center sm:text-center">
-                                  <span className="text-xs text-muted-foreground sm:hidden">Haftaya %</span>
+                                  <span className="text-xs text-muted-foreground sm:hidden">Havuz payı %</span>
                                   <p className="text-sm font-medium tabular-nums text-foreground">
-                                    {formatNumberTr(hWeekPct)} %
+                                    {formatNumberTr(r.share_percent)} %
                                   </p>
                                 </div>
                                 <div className="text-right">
@@ -623,16 +695,16 @@ export default function HakedisPage() {
                           })
                         )}
                         {data.closers.length > 0 && (
-                          <div className="flex flex-col gap-2 border-t border-border bg-muted/45 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)_minmax(0,4.25rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6">
+                          <div className="flex flex-col gap-2 border-t border-border bg-muted/45 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,4.5rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6">
                             <span className="text-sm font-semibold text-foreground">Toplam (kapatıcı)</span>
                             <p className="text-right text-sm font-bold text-primary sm:text-right">
                               {formatNumberTr(totalClosersTry)} ₺
                             </p>
                             <p className="text-center text-sm font-semibold tabular-nums text-foreground sm:text-center">
-                              {totalClosersTry > 0 ? "100" : "0"} %
+                              {formatNumberTr(sumCloserRates)}
                             </p>
                             <p className="text-center text-sm font-semibold tabular-nums text-foreground sm:text-center">
-                              {formatNumberTr(hakedisOfWeekTotalPct(totalCloserHakedisTry, wtt))} %
+                              {sumCloserRates > 0 ? "100" : totalClosersTry > 0 ? "100" : "0"} %
                             </p>
                             <div className="text-right">
                               <p className="text-sm font-bold text-foreground">{formatNumberTr(totalCloserHakedisTry)} ₺</p>
@@ -650,7 +722,7 @@ export default function HakedisPage() {
                         <div>
                           <p className="text-sm font-semibold text-foreground">Bu hafta hakediş toplamı</p>
                           <p className="text-xs text-muted-foreground">
-                            Satış yapan + Kapatıcı + JIN + ARSIMET (₺)
+                            Açıcı + Kapatıcı + JIN + ARSIMET (₺)
                           </p>
                         </div>
                         <div className="text-left sm:text-right">
