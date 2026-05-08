@@ -23,7 +23,7 @@ type SalesRow = {
   user_id: number;
   user_name: string;
   total_amount: string;
-  percentage: number;
+  share_percent: number;
   hakedis_try: string;
 };
 
@@ -31,7 +31,7 @@ type CloserRow = {
   closer_id: number;
   closer_name: string;
   total_amount: string;
-  percentage: number;
+  share_percent: number;
   hakedis_try: string;
 };
 
@@ -42,6 +42,8 @@ type HakedisExtras = {
   arsimetPercent: number;
   jinHakedisTry: string;
   arsimetHakedisTry: string;
+  salesHakedisPoolTry: string;
+  closerHakedisPoolTry: string;
 };
 
 type HakedisData = {
@@ -116,43 +118,12 @@ export default function HakedisPage() {
     return tryAmount / data.tryPerUsd;
   };
 
-  const saveRate = async (opts: {
-    weekStart: string;
-    userId: number;
-    role: "sales" | "closer";
-    percentage: number;
-  }) => {
-    const token = typeof window !== "undefined" ? window.localStorage.getItem("satistakip-token") : null;
-    if (!token) return;
-    const key = `${opts.userId}:${opts.role}`;
-    setSavingKey(key);
-    try {
-      const res = await fetch("/api/hakedis/rate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          weekStart: opts.weekStart,
-          userId: opts.userId,
-          role: opts.role,
-          percentage: opts.percentage,
-        }),
-      });
-      if (res.ok) {
-        const refresh = await fetch(`/api/hakedis?weekOffset=${weekOffset}`, { cache: "no-store" });
-        if (refresh.ok) setData(await refresh.json());
-      }
-    } finally {
-      setSavingKey(null);
-    }
-  };
-
   const saveExtras = async (partial: {
     weekTotalPercent?: number;
     jinPercent?: number;
     arsimetPercent?: number;
+    salesHakedisPoolTry?: number;
+    closerHakedisPoolTry?: number;
   }) => {
     if (!data) return;
     const token = typeof window !== "undefined" ? window.localStorage.getItem("satistakip-token") : null;
@@ -162,7 +133,11 @@ export default function HakedisPage() {
         ? "extras:week"
         : partial.jinPercent !== undefined
           ? "extras:jin"
-          : "extras:arsimet";
+          : partial.arsimetPercent !== undefined
+            ? "extras:arsimet"
+            : partial.salesHakedisPoolTry !== undefined
+              ? "extras:sales-pool"
+              : "extras:closer-pool";
     setSavingKey(sk);
     try {
       const res = await fetch("/api/hakedis/extras", {
@@ -262,9 +237,9 @@ export default function HakedisPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Hakediş</h1>
             <p className="text-sm text-muted-foreground">
-              Haftalık (İstanbul Pazartesi–Pazar): Her satış yapan ve kapatıcı için ayrı hakediş % siz kaydedersiniz;
-              tutar her hafta o kişinin cirosundan otomatik hesaplanır. JIN ve ARSIMET, haftanın tüm satış toplamı üzerinden
-              % ile hesaplanır.
+              Haftalık (İstanbul Pazartesi–Pazar): Satış yapan ve kapatıcı tek kutuda; her satırda grup içi pay % otomatik
+              (o grubun haftalık cirosuna göre). Her grubun kendi hakediş havuzu (₺) aynı oranla satırlara bölünür. JIN ve
+              ARSIMET, haftanın tüm satış toplamı üzerinden % ile hesaplanır; haftalık toplam % yalnızca kayıt / nottur.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -310,19 +285,21 @@ export default function HakedisPage() {
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           </div>
         ) : data ? (
-          <div className="space-y-6">
-            {(() => {
-              const ex = data.extras ?? {
-                weekTotalTry: "0",
-                weekTotalPercent: 0,
-                jinPercent: 0,
-                arsimetPercent: 0,
-                jinHakedisTry: "0",
-                arsimetHakedisTry: "0",
-              };
-              const wtt = Number(ex.weekTotalTry);
-              const usdWeek = tryToUsd(wtt);
-              return (
+          (() => {
+            const ex = data.extras ?? {
+              weekTotalTry: "0",
+              weekTotalPercent: 0,
+              jinPercent: 0,
+              arsimetPercent: 0,
+              jinHakedisTry: "0",
+              arsimetHakedisTry: "0",
+              salesHakedisPoolTry: "0.00",
+              closerHakedisPoolTry: "0.00",
+            };
+            const wtt = Number(ex.weekTotalTry);
+            const usdWeek = tryToUsd(wtt);
+            return (
+              <div className="space-y-6">
                 <Card className="border-primary/25">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-lg">JIN · ARSIMET · hafta toplamı</CardTitle>
@@ -420,166 +397,183 @@ export default function HakedisPage() {
                     })}
                   </CardContent>
                 </Card>
-              );
-            })()}
-            <div className="grid gap-6 lg:grid-cols-2">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">Satış yapan</CardTitle>
-                  <p className="text-xs text-muted-foreground">
-                    Haftalık ciro toplamı: {formatNumberTr(totalUsersTry)} ₺ — her kişi için ayrı % kaydı; tutar otomatik.
-                  </p>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="hidden border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_5.5rem_minmax(0,1fr)] sm:items-center sm:gap-3">
-                    <span>İsim</span>
-                    <span className="text-right">Haftalık ciro</span>
-                    <span className="text-center">Hakediş %</span>
-                    <span className="text-right">Hakediş tutarı</span>
-                  </div>
-                  <div className="divide-y divide-border">
-                    {data.users.length === 0 ? (
-                      <p className="px-4 py-6 text-center text-sm text-muted-foreground">Bu hafta kayıt yok.</p>
-                    ) : (
-                      data.users.map((r) => {
-                        const tl = Number(r.total_amount);
-                        const hk = Number(r.hakedis_try);
-                        const usdCiro = tryToUsd(tl);
-                        const usdHakedis = tryToUsd(hk);
-                        const saveKey = `${r.user_id}:sales`;
-                        return (
-                          <div
-                            key={r.user_id}
-                            className="flex flex-col gap-3 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_5.5rem_minmax(0,1fr)] sm:items-center sm:gap-3"
-                          >
-                            <span className="font-semibold uppercase text-foreground">{r.user_name}</span>
-                            <div className="flex flex-wrap items-center justify-between gap-2 sm:block sm:text-right">
-                              <span className="text-xs text-muted-foreground sm:hidden">Ciro</span>
-                              <p className="font-bold text-primary">{formatNumberTr(tl)} ₺</p>
-                              {usdCiro != null && (
-                                <p className="text-xs text-muted-foreground sm:text-right">{formatUsd(usdCiro)}</p>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-muted-foreground sm:hidden">Hakediş %</span>
-                              <Input
-                                type="number"
-                                min={0}
-                                max={100}
-                                step={0.01}
-                                className="h-9 w-24"
-                                defaultValue={r.percentage}
-                                key={`${data.weekStart}-${r.user_id}-sales-${r.percentage}`}
-                                disabled={savingKey === saveKey}
-                                onBlur={(e) => {
-                                  const v = Number(e.target.value);
-                                  if (Number.isNaN(v) || v < 0 || v > 100) {
-                                    e.target.value = String(r.percentage);
-                                    return;
-                                  }
-                                  if (Math.abs(v - r.percentage) < 1e-6) return;
-                                  void saveRate({
-                                    weekStart: data.weekStart,
-                                    userId: r.user_id,
-                                    role: "sales",
-                                    percentage: v,
-                                  });
-                                }}
-                              />
-                            </div>
-                            <div className="text-right">
-                              <p className="text-sm font-semibold text-foreground">{formatNumberTr(hk)} ₺</p>
-                              {usdHakedis != null && (
-                                <p className="text-xs text-muted-foreground">{formatUsd(usdHakedis)}</p>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">Satış yapan · Kapatıcı</CardTitle>
+                    <p className="text-xs text-muted-foreground">
+                      Her grup kendi haftalık ciro toplamı ve kendi hakediş havuzu (₺) ile hesaplanır; satırlar grup içinde
+                      oransal paylaşır.
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-0 p-0">
+                    <div className="border-b border-border">
+                      <div className="space-y-3 px-4 pb-3 pt-1 sm:px-6">
+                        <h3 className="text-sm font-semibold text-foreground">Satış yapan</h3>
+                        <p className="text-xs text-muted-foreground">
+                          Grup ciro toplamı: {formatNumberTr(totalUsersTry)} ₺.
+                        </p>
+                        <div className="space-y-1">
+                          <Label htmlFor="sales-pool" className="text-xs text-muted-foreground">
+                            Hakediş havuzu (₺)
+                          </Label>
+                          <Input
+                            id="sales-pool"
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            className="h-9 max-w-xs"
+                            defaultValue={ex.salesHakedisPoolTry}
+                            key={`${data.weekStart}-sales-pool-${ex.salesHakedisPoolTry}`}
+                            disabled={savingKey === "extras:sales-pool"}
+                            onBlur={(e) => {
+                              const v = Number(e.target.value);
+                              if (Number.isNaN(v) || v < 0) {
+                                e.target.value = ex.salesHakedisPoolTry;
+                                return;
+                              }
+                              const prev = Number(ex.salesHakedisPoolTry);
+                              if (Math.abs(v - prev) < 1e-6) return;
+                              void saveExtras({ salesHakedisPoolTry: v });
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div className="hidden border-y border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,1fr)] sm:items-center sm:gap-3 sm:px-6">
+                        <span>İsim</span>
+                        <span className="text-right">Haftalık ciro</span>
+                        <span className="text-center" title="Bu grubun haftalık toplam cirosundaki pay">
+                          Grup içi %
+                        </span>
+                        <span className="text-right">Hakediş</span>
+                      </div>
+                      <div className="divide-y divide-border">
+                        {data.users.length === 0 ? (
+                          <p className="px-4 py-6 text-center text-sm text-muted-foreground sm:px-6">Bu hafta kayıt yok.</p>
+                        ) : (
+                          data.users.map((r) => {
+                            const tl = Number(r.total_amount);
+                            const hk = Number(r.hakedis_try);
+                            const usdCiro = tryToUsd(tl);
+                            const usdHakedis = tryToUsd(hk);
+                            return (
+                              <div
+                                key={r.user_id}
+                                className="flex flex-col gap-3 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,1fr)] sm:items-center sm:gap-3 sm:px-6"
+                              >
+                                <span className="font-semibold uppercase text-foreground">{r.user_name}</span>
+                                <div className="flex flex-wrap items-center justify-between gap-2 sm:block sm:text-right">
+                                  <span className="text-xs text-muted-foreground sm:hidden">Ciro</span>
+                                  <p className="font-bold text-primary">{formatNumberTr(tl)} ₺</p>
+                                  {usdCiro != null && (
+                                    <p className="text-xs text-muted-foreground sm:text-right">{formatUsd(usdCiro)}</p>
+                                  )}
+                                </div>
+                                <div className="text-center sm:text-center">
+                                  <span className="text-xs text-muted-foreground sm:hidden">Grup içi %</span>
+                                  <p className="text-sm font-medium tabular-nums text-foreground">
+                                    {formatNumberTr(r.share_percent)} %
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-sm font-semibold text-foreground">{formatNumberTr(hk)} ₺</p>
+                                  {usdHakedis != null && (
+                                    <p className="text-xs text-muted-foreground">{formatUsd(usdHakedis)}</p>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
 
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">Kapatıcı</CardTitle>
-                  <p className="text-xs text-muted-foreground">
-                    Haftalık ciro toplamı: {formatNumberTr(totalClosersTry)} ₺ — her kişi için ayrı %; tutar otomatik.
-                  </p>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="hidden border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_5.5rem_minmax(0,1fr)] sm:items-center sm:gap-3">
-                    <span>İsim</span>
-                    <span className="text-right">Haftalık ciro</span>
-                    <span className="text-center">Hakediş %</span>
-                    <span className="text-right">Hakediş tutarı</span>
-                  </div>
-                  <div className="divide-y divide-border">
-                    {data.closers.length === 0 ? (
-                      <p className="px-4 py-6 text-center text-sm text-muted-foreground">Bu hafta kapatıcı kaydı yok.</p>
-                    ) : (
-                      data.closers.map((r) => {
-                        const tl = Number(r.total_amount);
-                        const hk = Number(r.hakedis_try);
-                        const usdCiro = tryToUsd(tl);
-                        const usdHakedis = tryToUsd(hk);
-                        const saveKey = `${r.closer_id}:closer`;
-                        return (
-                          <div
-                            key={r.closer_id}
-                            className="flex flex-col gap-3 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_5.5rem_minmax(0,1fr)] sm:items-center sm:gap-3"
-                          >
-                            <span className="font-semibold uppercase text-foreground">{r.closer_name}</span>
-                            <div className="flex flex-wrap items-center justify-between gap-2 sm:block sm:text-right">
-                              <span className="text-xs text-muted-foreground sm:hidden">Ciro</span>
-                              <p className="font-bold text-primary">{formatNumberTr(tl)} ₺</p>
-                              {usdCiro != null && (
-                                <p className="text-xs text-muted-foreground sm:text-right">{formatUsd(usdCiro)}</p>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-muted-foreground sm:hidden">Hakediş %</span>
-                              <Input
-                                type="number"
-                                min={0}
-                                max={100}
-                                step={0.01}
-                                className="h-9 w-24"
-                                defaultValue={r.percentage}
-                                key={`${data.weekStart}-${r.closer_id}-closer-${r.percentage}`}
-                                disabled={savingKey === saveKey}
-                                onBlur={(e) => {
-                                  const v = Number(e.target.value);
-                                  if (Number.isNaN(v) || v < 0 || v > 100) {
-                                    e.target.value = String(r.percentage);
-                                    return;
-                                  }
-                                  if (Math.abs(v - r.percentage) < 1e-6) return;
-                                  void saveRate({
-                                    weekStart: data.weekStart,
-                                    userId: r.closer_id,
-                                    role: "closer",
-                                    percentage: v,
-                                  });
-                                }}
-                              />
-                            </div>
-                            <div className="text-right">
-                              <p className="text-sm font-semibold text-foreground">{formatNumberTr(hk)} ₺</p>
-                              {usdHakedis != null && (
-                                <p className="text-xs text-muted-foreground">{formatUsd(usdHakedis)}</p>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
+                    <div>
+                      <div className="space-y-3 px-4 pb-3 pt-5 sm:px-6">
+                        <h3 className="text-sm font-semibold text-foreground">Kapatıcı</h3>
+                        <p className="text-xs text-muted-foreground">
+                          Grup ciro toplamı: {formatNumberTr(totalClosersTry)} ₺.
+                        </p>
+                        <div className="space-y-1">
+                          <Label htmlFor="closer-pool" className="text-xs text-muted-foreground">
+                            Hakediş havuzu (₺)
+                          </Label>
+                          <Input
+                            id="closer-pool"
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            className="h-9 max-w-xs"
+                            defaultValue={ex.closerHakedisPoolTry}
+                            key={`${data.weekStart}-closer-pool-${ex.closerHakedisPoolTry}`}
+                            disabled={savingKey === "extras:closer-pool"}
+                            onBlur={(e) => {
+                              const v = Number(e.target.value);
+                              if (Number.isNaN(v) || v < 0) {
+                                e.target.value = ex.closerHakedisPoolTry;
+                                return;
+                              }
+                              const prev = Number(ex.closerHakedisPoolTry);
+                              if (Math.abs(v - prev) < 1e-6) return;
+                              void saveExtras({ closerHakedisPoolTry: v });
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div className="hidden border-y border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,1fr)] sm:items-center sm:gap-3 sm:px-6">
+                        <span>İsim</span>
+                        <span className="text-right">Haftalık ciro</span>
+                        <span className="text-center" title="Bu grubun haftalık toplam cirosundaki pay">
+                          Grup içi %
+                        </span>
+                        <span className="text-right">Hakediş</span>
+                      </div>
+                      <div className="divide-y divide-border">
+                        {data.closers.length === 0 ? (
+                          <p className="px-4 py-6 text-center text-sm text-muted-foreground sm:px-6">
+                            Bu hafta kapatıcı kaydı yok.
+                          </p>
+                        ) : (
+                          data.closers.map((r) => {
+                            const tl = Number(r.total_amount);
+                            const hk = Number(r.hakedis_try);
+                            const usdCiro = tryToUsd(tl);
+                            const usdHakedis = tryToUsd(hk);
+                            return (
+                              <div
+                                key={r.closer_id}
+                                className="flex flex-col gap-3 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,5.5rem)_minmax(0,1fr)] sm:items-center sm:gap-3 sm:px-6"
+                              >
+                                <span className="font-semibold uppercase text-foreground">{r.closer_name}</span>
+                                <div className="flex flex-wrap items-center justify-between gap-2 sm:block sm:text-right">
+                                  <span className="text-xs text-muted-foreground sm:hidden">Ciro</span>
+                                  <p className="font-bold text-primary">{formatNumberTr(tl)} ₺</p>
+                                  {usdCiro != null && (
+                                    <p className="text-xs text-muted-foreground sm:text-right">{formatUsd(usdCiro)}</p>
+                                  )}
+                                </div>
+                                <div className="text-center sm:text-center">
+                                  <span className="text-xs text-muted-foreground sm:hidden">Grup içi %</span>
+                                  <p className="text-sm font-medium tabular-nums text-foreground">
+                                    {formatNumberTr(r.share_percent)} %
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-sm font-semibold text-foreground">{formatNumberTr(hk)} ₺</p>
+                                  {usdHakedis != null && (
+                                    <p className="text-xs text-muted-foreground">{formatUsd(usdHakedis)}</p>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            );
+          })()
         ) : (
           <p className="text-muted-foreground">Veri yüklenemedi.</p>
         )}

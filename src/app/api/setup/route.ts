@@ -103,6 +103,8 @@ export async function POST() {
         arsimet_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
         sales_total_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
         closer_total_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
+        sales_hakedis_pool_try NUMERIC(14,2) NOT NULL DEFAULT 0,
+        closer_hakedis_pool_try NUMERIC(14,2) NOT NULL DEFAULT 0,
         updated_at TIMESTAMPTZ DEFAULT now()
       );
     `);
@@ -112,6 +114,13 @@ export async function POST() {
     );
     await query(
       `ALTER TABLE hakedis_week_extras ADD COLUMN IF NOT EXISTS closer_total_percent NUMERIC(6,2) NOT NULL DEFAULT 0;`
+    );
+
+    await query(
+      `ALTER TABLE hakedis_week_extras ADD COLUMN IF NOT EXISTS sales_hakedis_pool_try NUMERIC(14,2) NOT NULL DEFAULT 0;`
+    );
+    await query(
+      `ALTER TABLE hakedis_week_extras ADD COLUMN IF NOT EXISTS closer_hakedis_pool_try NUMERIC(14,2) NOT NULL DEFAULT 0;`
     );
 
     await query(`

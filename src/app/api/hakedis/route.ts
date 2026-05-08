@@ -22,6 +22,22 @@ async function fetchTryPerUsd(): Promise<{ tryPerUsd: number; fxDate: string | n
   }
 }
 
+function splitPool(
+  rows: { total_amount: string }[],
+  grand: number,
+  pool: number
+): { share_percent: number; hakedis_try: string }[] {
+  if (grand <= 0 || rows.length === 0) {
+    return rows.map(() => ({ share_percent: 0, hakedis_try: "0.00" }));
+  }
+  return rows.map((row) => {
+    const amt = Number(row.total_amount);
+    const share = (100 * amt) / grand;
+    const hk = (pool * amt) / grand;
+    return { share_percent: Number(share.toFixed(4)), hakedis_try: hk.toFixed(2) };
+  });
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const weekOffset = Math.min(52, Math.max(-52, parseInt(searchParams.get("weekOffset") || "0", 10) || 0));
@@ -46,29 +62,6 @@ export async function GET(request: Request) {
   const weekEnd = boundRows[0]?.week_end;
   if (!weekStart || !weekEnd) {
     return NextResponse.json({ error: "week_bounds" }, { status: 500 });
-  }
-
-  let rateRows: { user_id: number; role: string; rate_percent: string }[] = [];
-  try {
-    const r = await query<{ user_id: number; role: string; rate_percent: string }>(
-      `
-      SELECT user_id, role, rate_percent::text AS rate_percent
-      FROM hakedis_week_user_rate
-      WHERE week_start = $1::date
-    `,
-      [weekStart]
-    );
-    rateRows = r.rows;
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (!/hakedis_week_user_rate/i.test(msg) || !/does not exist/i.test(msg)) {
-      console.error("[hakedis GET rates]", e);
-    }
-  }
-
-  const rateMap = new Map<string, number>();
-  for (const row of rateRows) {
-    rateMap.set(`${row.user_id}:${row.role}`, Number(row.rate_percent));
   }
 
   const [userRows, closerRows] = await Promise.all([
@@ -98,6 +91,9 @@ export async function GET(request: Request) {
     ),
   ]);
 
+  const salesGrand = userRows.rows.reduce((s, r) => s + Number(r.total_amount), 0);
+  const closerGrand = closerRows.rows.reduce((s, r) => s + Number(r.total_amount), 0);
+
   const fx = await fetchTryPerUsd();
 
   let weekTotalTry = "0";
@@ -119,15 +115,20 @@ export async function GET(request: Request) {
   let weekTotalPercent = 0;
   let jinPercent = 0;
   let arsimetPercent = 0;
+  let salesHakedisPoolTry = 0;
+  let closerHakedisPoolTry = 0;
 
   try {
     const ex = await query<{
       week_total_percent: string;
       jin_percent: string;
       arsimet_percent: string;
+      sales_hakedis_pool_try: string;
+      closer_hakedis_pool_try: string;
     }>(
       `
-      SELECT week_total_percent::text, jin_percent::text, arsimet_percent::text
+      SELECT week_total_percent::text, jin_percent::text, arsimet_percent::text,
+             sales_hakedis_pool_try::text, closer_hakedis_pool_try::text
       FROM hakedis_week_extras
       WHERE week_start = $1::date
     `,
@@ -137,10 +138,34 @@ export async function GET(request: Request) {
       weekTotalPercent = Number(ex.rows[0].week_total_percent);
       jinPercent = Number(ex.rows[0].jin_percent);
       arsimetPercent = Number(ex.rows[0].arsimet_percent);
+      salesHakedisPoolTry = Number(ex.rows[0].sales_hakedis_pool_try);
+      closerHakedisPoolTry = Number(ex.rows[0].closer_hakedis_pool_try);
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    if (!/hakedis_week_extras/i.test(msg) || !/does not exist/i.test(msg)) {
+    if (/sales_hakedis_pool_try/i.test(msg) || /closer_hakedis_pool_try/i.test(msg)) {
+      try {
+        const ex = await query<{
+          week_total_percent: string;
+          jin_percent: string;
+          arsimet_percent: string;
+        }>(
+          `
+          SELECT week_total_percent::text, jin_percent::text, arsimet_percent::text
+          FROM hakedis_week_extras
+          WHERE week_start = $1::date
+        `,
+          [weekStart]
+        );
+        if (ex.rows[0]) {
+          weekTotalPercent = Number(ex.rows[0].week_total_percent);
+          jinPercent = Number(ex.rows[0].jin_percent);
+          arsimetPercent = Number(ex.rows[0].arsimet_percent);
+        }
+      } catch (inner) {
+        console.error("[hakedis GET extras legacy]", inner);
+      }
+    } else if (!/hakedis_week_extras/i.test(msg) || !/does not exist/i.test(msg)) {
       console.error("[hakedis GET extras]", e);
     }
   }
@@ -149,27 +174,20 @@ export async function GET(request: Request) {
   const jinHakedisTry = (weekTotalNum * jinPercent) / 100;
   const arsimetHakedisTry = (weekTotalNum * arsimetPercent) / 100;
 
-  const users = userRows.rows.map((row) => {
-    const total = Number(row.total_amount);
-    const percentage = rateMap.get(`${row.user_id}:sales`) ?? 0;
-    const hakedisTry = (total * percentage) / 100;
-    return {
-      ...row,
-      percentage,
-      hakedis_try: hakedisTry.toFixed(2),
-    };
-  });
+  const salesSplits = splitPool(userRows.rows, salesGrand, salesHakedisPoolTry);
+  const closerSplits = splitPool(closerRows.rows, closerGrand, closerHakedisPoolTry);
 
-  const closers = closerRows.rows.map((row) => {
-    const total = Number(row.total_amount);
-    const percentage = rateMap.get(`${row.closer_id}:closer`) ?? 0;
-    const hakedisTry = (total * percentage) / 100;
-    return {
-      ...row,
-      percentage,
-      hakedis_try: hakedisTry.toFixed(2),
-    };
-  });
+  const users = userRows.rows.map((row, i) => ({
+    ...row,
+    share_percent: salesSplits[i]?.share_percent ?? 0,
+    hakedis_try: salesSplits[i]?.hakedis_try ?? "0.00",
+  }));
+
+  const closers = closerRows.rows.map((row, i) => ({
+    ...row,
+    share_percent: closerSplits[i]?.share_percent ?? 0,
+    hakedis_try: closerSplits[i]?.hakedis_try ?? "0.00",
+  }));
 
   return NextResponse.json({
     weekStart,
@@ -184,6 +202,8 @@ export async function GET(request: Request) {
       arsimetPercent,
       jinHakedisTry: jinHakedisTry.toFixed(2),
       arsimetHakedisTry: arsimetHakedisTry.toFixed(2),
+      salesHakedisPoolTry: salesHakedisPoolTry.toFixed(2),
+      closerHakedisPoolTry: closerHakedisPoolTry.toFixed(2),
     },
     tryPerUsd: fx.tryPerUsd,
     fxDate: fx.fxDate,
