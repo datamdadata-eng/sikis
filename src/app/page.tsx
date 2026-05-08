@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Package, LogOut, Plus, Trash2, Calculator, Calendar, Pencil } from "lucide-react";
+import { Package, LogOut, Plus, Trash2, Calculator, Calendar, Pencil, Banknote, CircleDollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -550,6 +550,18 @@ export default function Home() {
               <Link href="/ciro">
                 <Calendar className="size-4" />
                 Ciro
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" className="gap-2" asChild>
+              <Link href="/borc">
+                <Banknote className="size-4" />
+                Borçlar
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" className="gap-2" asChild>
+              <Link href="/hakedis">
+                <CircleDollarSign className="size-4" />
+                Hakediş
               </Link>
             </Button>
           </div>

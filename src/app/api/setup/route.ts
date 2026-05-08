@@ -48,6 +48,16 @@ export async function POST() {
     `);
 
     await query(`
+      CREATE TABLE IF NOT EXISTS debts (
+        id SERIAL PRIMARY KEY,
+        person_name TEXT NOT NULL,
+        amount NUMERIC(12,2) NOT NULL,
+        description TEXT,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+    `);
+
+    await query(`
       CREATE TABLE IF NOT EXISTS admins (
         id SERIAL PRIMARY KEY,
         username TEXT UNIQUE NOT NULL,

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Package, LogOut, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from "lucide-react";
+import { Package, LogOut, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Banknote, CircleDollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -205,13 +205,30 @@ export default function CiroPage() {
     <div className="min-h-screen bg-background text-foreground">
       <nav className="sticky top-0 z-40 border-b border-border bg-card/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1">
             <Button variant="ghost" size="sm" asChild>
-              <Link href="/">Dashboard</Link>
+              <Link href="/" className="gap-2">
+                <Package className="size-4" />
+                Dashboard
+              </Link>
             </Button>
-            <Button variant="secondary" size="sm" className="gap-2">
-              <CalendarIcon className="size-4" />
-              Ciro
+            <Button variant="secondary" size="sm" className="gap-2" asChild>
+              <Link href="/ciro">
+                <CalendarIcon className="size-4" />
+                Ciro
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" className="gap-2" asChild>
+              <Link href="/borc">
+                <Banknote className="size-4" />
+                Borçlar
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" className="gap-2" asChild>
+              <Link href="/hakedis">
+                <CircleDollarSign className="size-4" />
+                Hakediş
+              </Link>
             </Button>
           </div>
           <DropdownMenu>
