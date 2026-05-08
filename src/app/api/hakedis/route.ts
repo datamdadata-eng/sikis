@@ -44,6 +44,29 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "week_bounds" }, { status: 500 });
   }
 
+  let rateRows: { user_id: number; role: string; rate_percent: string }[] = [];
+  try {
+    const r = await query<{ user_id: number; role: string; rate_percent: string }>(
+      `
+      SELECT user_id, role, rate_percent::text AS rate_percent
+      FROM hakedis_week_user_rate
+      WHERE week_start = $1::date
+    `,
+      [weekStart]
+    );
+    rateRows = r.rows;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!/hakedis_week_user_rate/i.test(msg) || !/does not exist/i.test(msg)) {
+      console.error("[hakedis GET rates]", e);
+    }
+  }
+
+  const rateMap = new Map<string, number>();
+  for (const row of rateRows) {
+    rateMap.set(`${row.user_id}:${row.role}`, Number(row.rate_percent));
+  }
+
   const [userRows, closerRows] = await Promise.all([
     query<{ user_id: number; user_name: string; total_amount: string }>(
       `
@@ -73,12 +96,34 @@ export async function GET(request: Request) {
 
   const fx = await fetchTryPerUsd();
 
+  const users = userRows.rows.map((row) => {
+    const total = Number(row.total_amount);
+    const percentage = rateMap.get(`${row.user_id}:sales`) ?? 0;
+    const hakedisTry = (total * percentage) / 100;
+    return {
+      ...row,
+      percentage,
+      hakedis_try: hakedisTry.toFixed(2),
+    };
+  });
+
+  const closers = closerRows.rows.map((row) => {
+    const total = Number(row.total_amount);
+    const percentage = rateMap.get(`${row.closer_id}:closer`) ?? 0;
+    const hakedisTry = (total * percentage) / 100;
+    return {
+      ...row,
+      percentage,
+      hakedis_try: hakedisTry.toFixed(2),
+    };
+  });
+
   return NextResponse.json({
     weekStart,
     weekEnd,
     weekOffset,
-    users: userRows.rows,
-    closers: closerRows.rows,
+    users,
+    closers,
     tryPerUsd: fx.tryPerUsd,
     fxDate: fx.fxDate,
     fxError: fx.error ?? null,

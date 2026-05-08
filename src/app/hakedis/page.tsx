@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Package, LogOut, Calendar, Banknote, ChevronLeft, ChevronRight, CircleDollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,14 +18,28 @@ const formatNumberTr = (value: number) =>
 const formatUsd = (value: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
 
-type Row = { user_id?: number; closer_id?: number; user_name?: string; closer_name?: string; total_amount: string };
+type SalesRow = {
+  user_id: number;
+  user_name: string;
+  total_amount: string;
+  percentage: number;
+  hakedis_try: string;
+};
+
+type CloserRow = {
+  closer_id: number;
+  closer_name: string;
+  total_amount: string;
+  percentage: number;
+  hakedis_try: string;
+};
 
 type HakedisData = {
   weekStart: string;
   weekEnd: string;
   weekOffset: number;
-  users: Row[];
-  closers: Row[];
+  users: SalesRow[];
+  closers: CloserRow[];
   tryPerUsd: number;
   fxDate: string | null;
   fxError: string | null;
@@ -36,6 +51,7 @@ export default function HakedisPage() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [data, setData] = useState<HakedisData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
 
   const checkAuth = useCallback(async () => {
     if (typeof window === "undefined") return;
@@ -87,6 +103,39 @@ export default function HakedisPage() {
   const tryToUsd = (tryAmount: number) => {
     if (!data?.tryPerUsd || data.tryPerUsd <= 0) return null;
     return tryAmount / data.tryPerUsd;
+  };
+
+  const saveRate = async (opts: {
+    weekStart: string;
+    userId: number;
+    role: "sales" | "closer";
+    percentage: number;
+  }) => {
+    const token = typeof window !== "undefined" ? window.localStorage.getItem("satistakip-token") : null;
+    if (!token) return;
+    const key = `${opts.userId}:${opts.role}`;
+    setSavingKey(key);
+    try {
+      const res = await fetch("/api/hakedis/rate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          weekStart: opts.weekStart,
+          userId: opts.userId,
+          role: opts.role,
+          percentage: opts.percentage,
+        }),
+      });
+      if (res.ok) {
+        const refresh = await fetch(`/api/hakedis?weekOffset=${weekOffset}`, { cache: "no-store" });
+        if (refresh.ok) setData(await refresh.json());
+      }
+    } finally {
+      setSavingKey(null);
+    }
   };
 
   const weekLabel =
@@ -165,7 +214,10 @@ export default function HakedisPage() {
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Hakediş</h1>
-            <p className="text-sm text-muted-foreground">Haftalık satış toplamları (İstanbul takvimi, Pazartesi–Pazar)</p>
+            <p className="text-sm text-muted-foreground">
+              Sadece haftalık görünüm: her kişinin haftalık cirosu, sizin girdiğiniz hakediş yüzdesi ve tutarı (İstanbul,
+              Pazartesi–Pazar).
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" onClick={() => setWeekOffset((o) => o - 1)} aria-label="Önceki hafta">
@@ -212,23 +264,71 @@ export default function HakedisPage() {
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-lg">Satış yapan (kullanıcı)</CardTitle>
-                <p className="text-xs text-muted-foreground">Hafta toplamı: {formatNumberTr(totalUsersTry)} ₺</p>
+                <CardTitle className="text-lg">Satış yapan</CardTitle>
+                <p className="text-xs text-muted-foreground">Haftalık ciro toplamı: {formatNumberTr(totalUsersTry)} ₺</p>
               </CardHeader>
               <CardContent className="p-0">
+                <div className="hidden border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_5.5rem_minmax(0,1fr)] sm:items-center sm:gap-3">
+                  <span>İsim</span>
+                  <span className="text-right">Haftalık ciro</span>
+                  <span className="text-center">Hakediş %</span>
+                  <span className="text-right">Hakediş tutarı</span>
+                </div>
                 <div className="divide-y divide-border">
                   {data.users.length === 0 ? (
                     <p className="px-4 py-6 text-center text-sm text-muted-foreground">Bu hafta kayıt yok.</p>
                   ) : (
                     data.users.map((r) => {
                       const tl = Number(r.total_amount);
-                      const usd = tryToUsd(tl);
+                      const hk = Number(r.hakedis_try);
+                      const usdCiro = tryToUsd(tl);
+                      const usdHakedis = tryToUsd(hk);
+                      const saveKey = `${r.user_id}:sales`;
                       return (
-                        <div key={r.user_id} className="flex items-center justify-between gap-4 px-4 py-3">
+                        <div
+                          key={r.user_id}
+                          className="flex flex-col gap-3 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_5.5rem_minmax(0,1fr)] sm:items-center sm:gap-3"
+                        >
                           <span className="font-semibold uppercase text-foreground">{r.user_name}</span>
-                          <div className="text-right">
+                          <div className="flex flex-wrap items-center justify-between gap-2 sm:block sm:text-right">
+                            <span className="text-xs text-muted-foreground sm:hidden">Ciro</span>
                             <p className="font-bold text-primary">{formatNumberTr(tl)} ₺</p>
-                            {usd != null && <p className="text-xs text-muted-foreground">{formatUsd(usd)}</p>}
+                            {usdCiro != null && (
+                              <p className="text-xs text-muted-foreground sm:text-right">{formatUsd(usdCiro)}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground sm:hidden">Hakediş %</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.01}
+                              className="h-9 w-24"
+                              defaultValue={r.percentage}
+                              key={`${data.weekStart}-${r.user_id}-sales-${r.percentage}`}
+                              disabled={savingKey === saveKey}
+                              onBlur={(e) => {
+                                const v = Number(e.target.value);
+                                if (Number.isNaN(v) || v < 0 || v > 100) {
+                                  e.target.value = String(r.percentage);
+                                  return;
+                                }
+                                if (Math.abs(v - r.percentage) < 1e-6) return;
+                                void saveRate({
+                                  weekStart: data.weekStart,
+                                  userId: r.user_id,
+                                  role: "sales",
+                                  percentage: v,
+                                });
+                              }}
+                            />
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-semibold text-foreground">{formatNumberTr(hk)} ₺</p>
+                            {usdHakedis != null && (
+                              <p className="text-xs text-muted-foreground">{formatUsd(usdHakedis)}</p>
+                            )}
                           </div>
                         </div>
                       );
@@ -241,22 +341,70 @@ export default function HakedisPage() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-lg">Kapatıcı</CardTitle>
-                <p className="text-xs text-muted-foreground">Hafta toplamı: {formatNumberTr(totalClosersTry)} ₺</p>
+                <p className="text-xs text-muted-foreground">Haftalık ciro toplamı: {formatNumberTr(totalClosersTry)} ₺</p>
               </CardHeader>
               <CardContent className="p-0">
+                <div className="hidden border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_5.5rem_minmax(0,1fr)] sm:items-center sm:gap-3">
+                  <span>İsim</span>
+                  <span className="text-right">Haftalık ciro</span>
+                  <span className="text-center">Hakediş %</span>
+                  <span className="text-right">Hakediş tutarı</span>
+                </div>
                 <div className="divide-y divide-border">
                   {data.closers.length === 0 ? (
                     <p className="px-4 py-6 text-center text-sm text-muted-foreground">Bu hafta kapatıcı kaydı yok.</p>
                   ) : (
                     data.closers.map((r) => {
                       const tl = Number(r.total_amount);
-                      const usd = tryToUsd(tl);
+                      const hk = Number(r.hakedis_try);
+                      const usdCiro = tryToUsd(tl);
+                      const usdHakedis = tryToUsd(hk);
+                      const saveKey = `${r.closer_id}:closer`;
                       return (
-                        <div key={r.closer_id} className="flex items-center justify-between gap-4 px-4 py-3">
+                        <div
+                          key={r.closer_id}
+                          className="flex flex-col gap-3 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_5.5rem_minmax(0,1fr)] sm:items-center sm:gap-3"
+                        >
                           <span className="font-semibold uppercase text-foreground">{r.closer_name}</span>
-                          <div className="text-right">
+                          <div className="flex flex-wrap items-center justify-between gap-2 sm:block sm:text-right">
+                            <span className="text-xs text-muted-foreground sm:hidden">Ciro</span>
                             <p className="font-bold text-primary">{formatNumberTr(tl)} ₺</p>
-                            {usd != null && <p className="text-xs text-muted-foreground">{formatUsd(usd)}</p>}
+                            {usdCiro != null && (
+                              <p className="text-xs text-muted-foreground sm:text-right">{formatUsd(usdCiro)}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground sm:hidden">Hakediş %</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.01}
+                              className="h-9 w-24"
+                              defaultValue={r.percentage}
+                              key={`${data.weekStart}-${r.closer_id}-closer-${r.percentage}`}
+                              disabled={savingKey === saveKey}
+                              onBlur={(e) => {
+                                const v = Number(e.target.value);
+                                if (Number.isNaN(v) || v < 0 || v > 100) {
+                                  e.target.value = String(r.percentage);
+                                  return;
+                                }
+                                if (Math.abs(v - r.percentage) < 1e-6) return;
+                                void saveRate({
+                                  weekStart: data.weekStart,
+                                  userId: r.closer_id,
+                                  role: "closer",
+                                  percentage: v,
+                                });
+                              }}
+                            />
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-semibold text-foreground">{formatNumberTr(hk)} ₺</p>
+                            {usdHakedis != null && (
+                              <p className="text-xs text-muted-foreground">{formatUsd(usdHakedis)}</p>
+                            )}
                           </div>
                         </div>
                       );
