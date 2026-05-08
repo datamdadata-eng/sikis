@@ -153,25 +153,19 @@ export default function HakedisPage() {
   const totalPeopleCiro =
     data?.people.reduce((s, r) => s + Number(r.total_amount ?? 0), 0) ?? 0;
 
-  const saveRate = async (opts: { weekStart: string; userId: number; percentage: number }) => {
+  const saveUserHakedisPercent = async (opts: { userId: number; percentage: number }) => {
     const token = typeof window !== "undefined" ? window.localStorage.getItem("satistakip-token") : null;
     if (!token) return;
     const key = `person:${opts.userId}`;
     setSavingKey(key);
     try {
-      const res = await fetch("/api/hakedis/rate", {
-        method: "POST",
+      const res = await fetch(`/api/users/${opts.userId}`, {
+        method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          weekStart: opts.weekStart,
-          userId: opts.userId,
-          role: "sales",
-          percentage: opts.percentage,
-          unified: true,
-        }),
+        body: JSON.stringify({ defaultHakedisPercent: opts.percentage }),
       });
       if (res.ok) {
         const refresh = await fetch(`/api/hakedis?weekOffset=${weekOffset}`, { cache: "no-store" });
@@ -249,10 +243,9 @@ export default function HakedisPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Hakediş</h1>
             <p className="text-sm text-muted-foreground">
-              Haftalık (İstanbul Pazartesi–Pazar): Her kişi için o haftanın{" "}
-              <strong className="text-foreground">toplam cirosuna</strong> (satış yapan + kapatıcı){" "}
-              <strong className="text-foreground">hakediş %</strong> kaydedersiniz; tutar otomatik: ciro × % ÷ 100. JIN
-              ve ARSIMET hafta satış toplamı üzerinden %; haftalık toplam % yalnızca kayıt / nottur.
+              Haftalık (İstanbul Pazartesi–Pazar): Kişi başı <strong className="text-foreground">hakediş %</strong>{" "}
+              kullanıcıda sabit kayıtlıdır; her hafta aynı oran uygulanır, tutar: o haftanın cirosu (satış + kapatıcı) × %
+              ÷ 100. JIN ve ARSIMET hafta satış toplamı üzerinden %; haftalık toplam % yalnızca kayıt / nottur.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -416,8 +409,8 @@ export default function HakedisPage() {
                   <CardHeader className="pb-2">
                     <CardTitle className="text-lg">Kişi hakedişi</CardTitle>
                     <p className="text-xs text-muted-foreground">
-                      Ciro: bu hafta satış yapan ve kapatıcı olarak geçen tutarların toplamı. Hakediş ₺ = ciro × hakediş
-                      % ÷ 100.
+                      Ciro: bu hafta satış yapan + kapatıcı toplamı. <strong className="text-foreground">Hakediş %</strong>{" "}
+                      kullanıcıda sabittir; bir kez kaydedilir, her hafta aynı oranla tutar hesaplanır (ciro × % ÷ 100).
                     </p>
                   </CardHeader>
                   <CardContent className="space-y-0 p-0">
@@ -470,11 +463,7 @@ export default function HakedisPage() {
                                       return;
                                     }
                                     if (Math.abs(v - r.rate_percent) < 1e-6) return;
-                                    void saveRate({
-                                      weekStart: data.weekStart,
-                                      userId: r.user_id,
-                                      percentage: v,
-                                    });
+                                    void saveUserHakedisPercent({ userId: r.user_id, percentage: v });
                                   }}
                                 />
                               </div>

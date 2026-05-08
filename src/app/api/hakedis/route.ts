@@ -22,15 +22,6 @@ async function fetchTryPerUsd(): Promise<{ tryPerUsd: number; fxDate: string | n
   }
 }
 
-/** Kayıtlı %: önce sales satırı, yoksa closer (tek liste için birleşik). */
-function unifiedRate(userId: number, rateMap: Map<string, number>): number {
-  const s = rateMap.get(`${userId}:sales`);
-  const c = rateMap.get(`${userId}:closer`);
-  if (s != null && s > 0) return s;
-  if (c != null && c > 0) return c;
-  return s ?? c ?? 0;
-}
-
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const weekOffset = Math.min(52, Math.max(-52, parseInt(searchParams.get("weekOffset") || "0", 10) || 0));
@@ -57,29 +48,70 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "week_bounds" }, { status: 500 });
   }
 
-  const { rows: personRows } = await query<{ user_id: number; user_name: string; total_amount: string }>(
-    `
-    WITH line_amts AS (
-      SELECT s.user_id AS uid, s.amount
-      FROM sales s
-      WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date >= $1::date
-        AND (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date <= $2::date
-        AND s.user_id IS NOT NULL
-      UNION ALL
-      SELECT s.closer_user_id AS uid, s.amount
-      FROM sales s
-      WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date >= $1::date
-        AND (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date <= $2::date
-        AND s.closer_user_id IS NOT NULL
-    )
-    SELECT u.id AS user_id, u.name AS user_name, COALESCE(SUM(l.amount), 0)::text AS total_amount
-    FROM line_amts l
-    INNER JOIN users u ON u.id = l.uid
-    GROUP BY u.id, u.name
-    ORDER BY SUM(l.amount) DESC NULLS LAST
-    `,
-    [weekStart, weekEnd]
-  );
+  let personRows: { user_id: number; user_name: string; total_amount: string; default_hakedis_percent: string }[] = [];
+  try {
+    const pr = await query<{
+      user_id: number;
+      user_name: string;
+      total_amount: string;
+      default_hakedis_percent: string;
+    }>(
+      `
+      WITH line_amts AS (
+        SELECT s.user_id AS uid, s.amount
+        FROM sales s
+        WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date >= $1::date
+          AND (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date <= $2::date
+          AND s.user_id IS NOT NULL
+        UNION ALL
+        SELECT s.closer_user_id AS uid, s.amount
+        FROM sales s
+        WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date >= $1::date
+          AND (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date <= $2::date
+          AND s.closer_user_id IS NOT NULL
+      )
+      SELECT u.id AS user_id, u.name AS user_name, COALESCE(SUM(l.amount), 0)::text AS total_amount,
+             COALESCE(u.default_hakedis_percent, 0)::text AS default_hakedis_percent
+      FROM line_amts l
+      INNER JOIN users u ON u.id = l.uid
+      GROUP BY u.id, u.name, u.default_hakedis_percent
+      ORDER BY SUM(l.amount) DESC NULLS LAST
+      `,
+      [weekStart, weekEnd]
+    );
+    personRows = pr.rows;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/default_hakedis_percent/i.test(msg)) {
+      const pr = await query<{ user_id: number; user_name: string; total_amount: string }>(
+        `
+        WITH line_amts AS (
+          SELECT s.user_id AS uid, s.amount
+          FROM sales s
+          WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date >= $1::date
+            AND (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date <= $2::date
+            AND s.user_id IS NOT NULL
+          UNION ALL
+          SELECT s.closer_user_id AS uid, s.amount
+          FROM sales s
+          WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date >= $1::date
+            AND (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date <= $2::date
+            AND s.closer_user_id IS NOT NULL
+        )
+        SELECT u.id AS user_id, u.name AS user_name, COALESCE(SUM(l.amount), 0)::text AS total_amount
+        FROM line_amts l
+        INNER JOIN users u ON u.id = l.uid
+        GROUP BY u.id, u.name
+        ORDER BY SUM(l.amount) DESC NULLS LAST
+        `,
+        [weekStart, weekEnd]
+      );
+      personRows = pr.rows.map((r) => ({ ...r, default_hakedis_percent: "0" }));
+    } else {
+      console.error("[hakedis GET people]", e);
+      return NextResponse.json({ error: "people_query_failed" }, { status: 500 });
+    }
+  }
 
   const fx = await fetchTryPerUsd();
 
@@ -132,30 +164,14 @@ export async function GET(request: Request) {
   const jinHakedisTry = (weekTotalNum * jinPercent) / 100;
   const arsimetHakedisTry = (weekTotalNum * arsimetPercent) / 100;
 
-  const rateMap = new Map<string, number>();
-  try {
-    const rr = await query<{ user_id: number; role: string; rate_percent: string }>(
-      `SELECT user_id, role, rate_percent::text FROM hakedis_week_user_rate WHERE week_start = $1::date`,
-      [weekStart]
-    );
-    for (const row of rr.rows) {
-      if (row.role === "sales" || row.role === "closer") {
-        rateMap.set(`${row.user_id}:${row.role}`, Number(row.rate_percent));
-      }
-    }
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (!/hakedis_week_user_rate/i.test(msg) || !/does not exist/i.test(msg)) {
-      console.error("[hakedis GET rates]", e);
-    }
-  }
-
   const people = personRows.map((row) => {
     const ciro = Number(row.total_amount);
-    const rate = unifiedRate(row.user_id, rateMap);
+    const rate = Number(row.default_hakedis_percent ?? 0);
     const hk = (ciro * rate) / 100;
     return {
-      ...row,
+      user_id: row.user_id,
+      user_name: row.user_name,
+      total_amount: row.total_amount,
       rate_percent: Number(rate.toFixed(2)),
       hakedis_try: hk.toFixed(2),
     };

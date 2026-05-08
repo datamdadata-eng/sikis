@@ -11,6 +11,10 @@ export async function POST() {
       );
     `);
 
+    await query(
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS default_hakedis_percent NUMERIC(6,2) NOT NULL DEFAULT 0;`
+    );
+
     await query(`
       CREATE TABLE IF NOT EXISTS money_recipients (
         id SERIAL PRIMARY KEY,

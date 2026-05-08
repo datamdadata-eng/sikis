@@ -2,8 +2,17 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 
 export async function GET() {
-  const { rows } = await query<{ id: number; name: string }>("SELECT id, name FROM users ORDER BY id DESC");
-  return NextResponse.json(rows);
+  try {
+    const { rows } = await query<{ id: number; name: string; default_hakedis_percent: string }>(
+      `SELECT id, name, default_hakedis_percent::text FROM users ORDER BY id DESC`
+    );
+    return NextResponse.json(rows);
+  } catch {
+    const { rows } = await query<{ id: number; name: string }>(
+      "SELECT id, name FROM users ORDER BY id DESC"
+    );
+    return NextResponse.json(rows);
+  }
 }
 
 export async function POST(request: Request) {
