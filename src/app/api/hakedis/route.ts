@@ -41,25 +41,37 @@ export async function GET(request: Request) {
       default_hakedis_percent: string;
     }>(
       `
-      WITH line_amts AS (
-        SELECT s.user_id AS uid, s.amount
+      WITH contrib AS (
+        SELECT
+          u.id AS user_id,
+          u.name AS user_name,
+          u.default_hakedis_percent,
+          SUM(
+            CASE
+              WHEN s.user_id IS NOT NULL
+                   AND s.closer_user_id IS NOT NULL
+                   AND s.user_id = s.closer_user_id
+                   AND u.id = s.user_id
+                THEN s.amount
+              WHEN s.user_id = u.id
+                   AND (s.closer_user_id IS NULL OR s.closer_user_id IS DISTINCT FROM s.user_id)
+                THEN s.amount
+              WHEN s.closer_user_id = u.id AND s.user_id IS DISTINCT FROM s.closer_user_id
+                THEN s.amount
+              ELSE 0
+            END
+          ) AS amt
         FROM sales s
+        INNER JOIN users u ON u.id = s.user_id OR u.id = s.closer_user_id
         WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date >= $1::date
           AND (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date <= $2::date
-          AND s.user_id IS NOT NULL
-        UNION ALL
-        SELECT s.closer_user_id AS uid, s.amount
-        FROM sales s
-        WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date >= $1::date
-          AND (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date <= $2::date
-          AND s.closer_user_id IS NOT NULL
+        GROUP BY u.id, u.name, u.default_hakedis_percent
       )
-      SELECT u.id AS user_id, u.name AS user_name, COALESCE(SUM(l.amount), 0)::text AS total_amount,
-             COALESCE(u.default_hakedis_percent, 0)::text AS default_hakedis_percent
-      FROM line_amts l
-      INNER JOIN users u ON u.id = l.uid
-      GROUP BY u.id, u.name, u.default_hakedis_percent
-      ORDER BY SUM(l.amount) DESC NULLS LAST
+      SELECT c.user_id, c.user_name, c.amt::text AS total_amount,
+             COALESCE(c.default_hakedis_percent, 0)::text AS default_hakedis_percent
+      FROM contrib c
+      WHERE c.amt > 0
+      ORDER BY c.amt DESC NULLS LAST
       `,
       [weekStart, weekEnd]
     );
@@ -69,24 +81,35 @@ export async function GET(request: Request) {
     if (/default_hakedis_percent/i.test(msg)) {
       const pr = await query<{ user_id: number; user_name: string; total_amount: string }>(
         `
-        WITH line_amts AS (
-          SELECT s.user_id AS uid, s.amount
+        WITH contrib AS (
+          SELECT
+            u.id AS user_id,
+            u.name AS user_name,
+            SUM(
+              CASE
+                WHEN s.user_id IS NOT NULL
+                     AND s.closer_user_id IS NOT NULL
+                     AND s.user_id = s.closer_user_id
+                     AND u.id = s.user_id
+                  THEN s.amount
+                WHEN s.user_id = u.id
+                     AND (s.closer_user_id IS NULL OR s.closer_user_id IS DISTINCT FROM s.user_id)
+                  THEN s.amount
+                WHEN s.closer_user_id = u.id AND s.user_id IS DISTINCT FROM s.closer_user_id
+                  THEN s.amount
+                ELSE 0
+              END
+            ) AS amt
           FROM sales s
+          INNER JOIN users u ON u.id = s.user_id OR u.id = s.closer_user_id
           WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date >= $1::date
             AND (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date <= $2::date
-            AND s.user_id IS NOT NULL
-          UNION ALL
-          SELECT s.closer_user_id AS uid, s.amount
-          FROM sales s
-          WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date >= $1::date
-            AND (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date <= $2::date
-            AND s.closer_user_id IS NOT NULL
+          GROUP BY u.id, u.name
         )
-        SELECT u.id AS user_id, u.name AS user_name, COALESCE(SUM(l.amount), 0)::text AS total_amount
-        FROM line_amts l
-        INNER JOIN users u ON u.id = l.uid
-        GROUP BY u.id, u.name
-        ORDER BY SUM(l.amount) DESC NULLS LAST
+        SELECT c.user_id, c.user_name, c.amt::text AS total_amount
+        FROM contrib c
+        WHERE c.amt > 0
+        ORDER BY c.amt DESC NULLS LAST
         `,
         [weekStart, weekEnd]
       );
