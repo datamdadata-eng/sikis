@@ -95,6 +95,17 @@ export async function POST() {
       );
     `);
 
+    await query(`
+      CREATE TABLE IF NOT EXISTS debt_reductions (
+        id SERIAL PRIMARY KEY,
+        person_name TEXT NOT NULL,
+        amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+        currency TEXT NOT NULL CHECK (currency IN ('TRY', 'USD')),
+        description TEXT,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+    `);
+
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error(e);

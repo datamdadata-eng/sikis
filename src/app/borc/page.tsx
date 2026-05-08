@@ -1,19 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Package, LogOut, Calendar, Banknote, Plus, Trash2, CircleDollarSign } from "lucide-react";
+import { Package, LogOut, Calendar, Banknote, Plus, Trash2, CircleDollarSign, MinusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
 type Debt = {
   id: number;
   person_name: string;
@@ -21,6 +29,24 @@ type Debt = {
   description: string | null;
   currency?: "USD" | "TRY";
   created_at?: string;
+};
+
+type Reduction = {
+  id: number;
+  person_name: string;
+  amount: string;
+  currency: "USD" | "TRY";
+  description: string | null;
+  created_at?: string;
+};
+
+type Bucket = { debts: Debt[]; reductions: Reduction[] };
+
+type PersonBuckets = {
+  key: string;
+  displayName: string;
+  USD: Bucket;
+  TRY: Bucket;
 };
 
 const formatNumberTr = (value: number) =>
@@ -31,20 +57,70 @@ const formatUsd = (value: number) =>
 
 const debtCurrency = (d: Debt): "USD" | "TRY" => (d.currency === "TRY" ? "TRY" : "USD");
 
-const parseUsdInput = (value: string): number => {
+const parseAmountInput = (value: string): number => {
   const n = Number(String(value).trim().replace(",", "."));
   return Number.isFinite(n) ? n : NaN;
 };
+
+function bucketSums(b: Bucket) {
+  const debtSum = b.debts.reduce((s, d) => s + Number(d.amount ?? 0), 0);
+  const paidSum = b.reductions.reduce((s, r) => s + Number(r.amount ?? 0), 0);
+  return { debtSum, paidSum, balance: debtSum - paidSum };
+}
+
+function buildPeople(debts: Debt[], reductions: Reduction[]): PersonBuckets[] {
+  const m = new Map<string, PersonBuckets>();
+  const emptyBucket = (): Bucket => ({ debts: [], reductions: [] });
+
+  for (const d of debts) {
+    const key = d.person_name.trim().toUpperCase();
+    if (!key) continue;
+    if (!m.has(key)) {
+      m.set(key, { key, displayName: d.person_name.trim(), USD: emptyBucket(), TRY: emptyBucket() });
+    }
+    const p = m.get(key)!;
+    p.displayName = d.person_name.trim();
+    const cur = debtCurrency(d);
+    p[cur].debts.push(d);
+  }
+  for (const r of reductions) {
+    const key = r.person_name.trim().toUpperCase();
+    if (!key) continue;
+    if (!m.has(key)) {
+      m.set(key, { key, displayName: r.person_name.trim(), USD: emptyBucket(), TRY: emptyBucket() });
+    }
+    const p = m.get(key)!;
+    const cur = r.currency === "TRY" ? "TRY" : "USD";
+    p[cur].reductions.push(r);
+  }
+
+  return [...m.values()].sort((a, b) => a.key.localeCompare(b.key, "tr", { sensitivity: "base" }));
+}
+
+function formatMoney(n: number, cur: "USD" | "TRY") {
+  return cur === "USD" ? formatUsd(n) : `${formatNumberTr(n)} ₺`;
+}
 
 export default function BorcPage() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [currentUserName, setCurrentUserName] = useState<string | null>(null);
   const [debts, setDebts] = useState<Debt[]>([]);
+  const [reductions, setReductions] = useState<Reduction[]>([]);
   const [personName, setPersonName] = useState("");
   const [amountUsd, setAmountUsd] = useState("");
   const [desc, setDesc] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [reduceSelect, setReduceSelect] = useState("");
+  const [reduceAmountGlobal, setReduceAmountGlobal] = useState("");
+  const [reduceDescGlobal, setReduceDescGlobal] = useState("");
+  const [reduceLoading, setReduceLoading] = useState(false);
+
+  /** keyed by `${personKey}|USD` veya `|TRY` */
+  const [cardReduce, setCardReduce] = useState<
+    Record<string, { amount: string; desc: string; loading: boolean }>
+  >({});
 
   const checkAuth = useCallback(async () => {
     if (typeof window === "undefined") return;
@@ -72,9 +148,16 @@ export default function BorcPage() {
     try {
       const res = await fetch("/api/debts", { cache: "no-store" });
       const data = await res.json();
-      setDebts(Array.isArray(data) ? data : []);
+      if (Array.isArray(data)) {
+        setDebts(data);
+        setReductions([]);
+      } else {
+        setDebts(Array.isArray(data.debts) ? data.debts : []);
+        setReductions(Array.isArray(data.reductions) ? data.reductions : []);
+      }
     } catch {
       setDebts([]);
+      setReductions([]);
     }
   }, []);
 
@@ -86,18 +169,119 @@ export default function BorcPage() {
     if (loggedIn) loadDebts();
   }, [loggedIn, loadDebts]);
 
+  const people = useMemo(() => buildPeople(debts, reductions), [debts, reductions]);
+
+  const { grossUsd, paidUsd, netUsd, grossTry, paidTry, netTry } = useMemo(() => {
+    const gUsd = debts.filter((d) => debtCurrency(d) === "USD").reduce((s, d) => s + Number(d.amount ?? 0), 0);
+    const pUsd = reductions.filter((r) => r.currency !== "TRY").reduce((s, r) => s + Number(r.amount ?? 0), 0);
+    const gTry = debts.filter((d) => debtCurrency(d) === "TRY").reduce((s, d) => s + Number(d.amount ?? 0), 0);
+    const pTry = reductions.filter((r) => r.currency === "TRY").reduce((s, r) => s + Number(r.amount ?? 0), 0);
+    return {
+      grossUsd: gUsd,
+      paidUsd: pUsd,
+      netUsd: gUsd - pUsd,
+      grossTry: gTry,
+      paidTry: pTry,
+      netTry: gTry - pTry,
+    };
+  }, [debts, reductions]);
+
+  const reduceOptions = useMemo(() => {
+    const opts: { value: string; label: string }[] = [];
+    for (const p of people) {
+      for (const cur of ["USD", "TRY"] as const) {
+        const b = p[cur];
+        if (b.debts.length === 0 && b.reductions.length === 0) continue;
+        const { balance } = bucketSums(b);
+        if (balance <= 0.0001) continue;
+        const value = `${p.key}|${cur}`;
+        const label = `${p.displayName} (${cur}) — kalan ${formatMoney(balance, cur)}`;
+        opts.push({ value, label });
+      }
+    }
+    return opts;
+  }, [people]);
+
   const handleLogout = () => {
     if (typeof window !== "undefined") window.localStorage.removeItem("satistakip-token");
     setLoggedIn(false);
     setCurrentUserName(null);
   };
 
-  const totalUsd = debts.filter((d) => debtCurrency(d) === "USD").reduce((sum, d) => sum + Number(d.amount ?? 0), 0);
-  const totalTry = debts.filter((d) => debtCurrency(d) === "TRY").reduce((sum, d) => sum + Number(d.amount ?? 0), 0);
+  const cardKey = (personKey: string, cur: "USD" | "TRY") => `${personKey}|${cur}`;
+
+  const getCardState = (k: string) =>
+    cardReduce[k] ?? { amount: "", desc: "", loading: false };
+
+  const setCardField = (k: string, patch: Partial<{ amount: string; desc: string; loading: boolean }>) => {
+    setCardReduce((prev) => {
+      const cur = prev[k] ?? { amount: "", desc: "", loading: false };
+      return { ...prev, [k]: { ...cur, ...patch } };
+    });
+  };
+
+  const applyReduction = async (
+    personNameForApi: string,
+    currency: "USD" | "TRY",
+    amountStr: string,
+    description: string | null,
+    cardKeyOpt: string | null
+  ) => {
+    const amount = parseAmountInput(amountStr);
+    if (Number.isNaN(amount) || amount <= 0) {
+      setError("Geçerli bir tutar girin.");
+      return false;
+    }
+    setError(null);
+    if (cardKeyOpt) setCardField(cardKeyOpt, { loading: true });
+    else setReduceLoading(true);
+    try {
+      const res = await fetch("/api/debts/reduce", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          personName: personNameForApi,
+          amount,
+          currency,
+          description,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 503 && (data as { error?: string }).error === "setup_required") {
+        setError(
+          (data as { message?: string }).message ??
+            "Kurulum gerekli: bir kez POST /api/setup çalıştırın."
+        );
+        return false;
+      }
+      if (res.status === 400) {
+        setError((data as { message?: string }).message ?? "Düşüm yapılamadı.");
+        return false;
+      }
+      if (!res.ok) {
+        setError("Düşüm kaydedilemedi.");
+        return false;
+      }
+      if (cardKeyOpt) setCardField(cardKeyOpt, { amount: "", desc: "", loading: false });
+      else {
+        setReduceAmountGlobal("");
+        setReduceDescGlobal("");
+        setReduceSelect("");
+      }
+      await loadDebts();
+      return true;
+    } catch {
+      setError("Düşüm kaydedilemedi.");
+      return false;
+    } finally {
+      if (cardKeyOpt) setCardField(cardKeyOpt, { loading: false });
+      else setReduceLoading(false);
+    }
+  };
 
   const handleAdd = async () => {
     const name = personName.trim();
-    const amount = parseUsdInput(amountUsd);
+    const amount = parseAmountInput(amountUsd);
     if (!name) {
       setError("Kişi adı girin.");
       return;
@@ -147,8 +331,28 @@ export default function BorcPage() {
       return;
     }
     setError(null);
-    setDebts((prev) => prev.filter((d) => d.id !== id));
     await loadDebts();
+  };
+
+  const handleDeleteReduction = async (id: number) => {
+    if (!confirm("Bu düşüm kaydını silmek istediğinize emin misiniz?")) return;
+    const res = await fetch(`/api/debts/reductions/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      setError("Düşüm silinemedi.");
+      return;
+    }
+    setError(null);
+    await loadDebts();
+  };
+
+  const handleGlobalReduce = async () => {
+    if (!reduceSelect.includes("|")) {
+      setError("Önce kişi ve para birimini seçin.");
+      return;
+    }
+    const [pKey, cur] = reduceSelect.split("|");
+    const currency = cur === "TRY" ? "TRY" : "USD";
+    await applyReduction(pKey, currency, reduceAmountGlobal, reduceDescGlobal.trim() || null, null);
   };
 
   if (!loggedIn) {
@@ -218,15 +422,90 @@ export default function BorcPage() {
 
         <Card className="mb-6 border-primary/30">
           <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Toplam borç (USD)</p>
-            <p className="text-3xl font-bold text-primary">{formatUsd(totalUsd)}</p>
-            {totalTry > 0 && (
-              <p className="mt-2 text-sm text-muted-foreground">
-                Eski TL kayıtları toplamı:{" "}
-                <span className="font-semibold text-foreground">{formatNumberTr(totalTry)} ₺</span>
-              </p>
-            )}
-            <p className="mt-1 text-xs text-muted-foreground">{debts.length} kayıt</p>
+            <p className="text-sm text-muted-foreground">Kalan borç (USD)</p>
+            <p className={`text-3xl font-bold ${netUsd < -0.01 ? "text-amber-600" : "text-primary"}`}>
+              {formatUsd(netUsd)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Brüt: {formatUsd(grossUsd)} · Düşülen: {formatUsd(paidUsd)}
+            </p>
+            {grossTry > 0 || paidTry > 0 ? (
+              <div className="mt-3 border-t border-border pt-3">
+                <p className="text-sm text-muted-foreground">Kalan (TRY — eski kayıtlar)</p>
+                <p className={`text-xl font-semibold ${netTry < -0.01 ? "text-amber-600" : "text-foreground"}`}>
+                  {formatNumberTr(netTry)} ₺
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Brüt: {formatNumberTr(grossTry)} ₺ · Düşülen: {formatNumberTr(paidTry)} ₺
+                </p>
+              </div>
+            ) : null}
+            <p className="mt-2 text-xs text-muted-foreground">
+              {debts.length} borç satırı · {reductions.length} düşüm
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="mb-6 border-border">
+          <CardHeader>
+            <CardTitle className="text-base">Borç düş (kişi seç)</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Kalan borcu olan kişiler listelenir; tutar kalanı aşamaz.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Kişi ve para birimi</Label>
+                <Select
+                  value={reduceSelect || undefined}
+                  onValueChange={(v) => setReduceSelect(v)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={reduceOptions.length ? "Seçin…" : "Kalan borcu olan kişi yok"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {reduceOptions.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Düşülecek tutar</Label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step="0.01"
+                  placeholder="0.00"
+                  value={reduceAmountGlobal}
+                  onChange={(e) => setReduceAmountGlobal(e.target.value)}
+                  disabled={reduceOptions.length === 0}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Not (isteğe bağlı)</Label>
+                <Input
+                  placeholder="Örn: nakit ödeme"
+                  value={reduceDescGlobal}
+                  onChange={(e) => setReduceDescGlobal(e.target.value)}
+                  disabled={reduceOptions.length === 0}
+                />
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={reduceLoading || !reduceSelect || reduceOptions.length === 0}
+              onClick={() => void handleGlobalReduce()}
+              className="gap-2"
+            >
+              <MinusCircle className="size-4" />
+              {reduceLoading ? "Kaydediliyor…" : "Borcu düş"}
+            </Button>
           </CardContent>
         </Card>
 
@@ -268,57 +547,160 @@ export default function BorcPage() {
                 />
               </div>
             </div>
-            <Button onClick={handleAdd} disabled={loading} size="lg">
+            <Button onClick={() => void handleAdd()} disabled={loading} size="lg">
               <Plus className="size-4" />
               {loading ? "Kaydediliyor..." : "Borç ekle"}
             </Button>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Borç listesi</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="divide-y divide-border overflow-hidden rounded-b-xl">
-              {debts.length === 0 ? (
-                <p className="px-4 py-8 text-center text-sm text-muted-foreground">Henüz borç kaydı yok.</p>
-              ) : (
-                debts.map((d) => (
-                  <div
-                    key={d.id}
-                    className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold uppercase text-foreground">{d.person_name}</p>
-                      <p className="text-lg font-bold text-primary">
-                        {debtCurrency(d) === "USD"
-                          ? formatUsd(Number(d.amount))
-                          : `${formatNumberTr(Number(d.amount))} ₺`}
-                        {debtCurrency(d) === "TRY" && (
-                          <span className="ml-2 text-xs font-normal text-muted-foreground">(eski TL)</span>
+        <h2 className="mb-3 text-lg font-semibold tracking-tight">Kişi bazında özet</h2>
+        <div className="space-y-4">
+          {people.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-muted-foreground">Henüz kayıt yok.</CardContent>
+            </Card>
+          ) : (
+            people.map((person) => (
+              <Card key={person.key}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base uppercase">{person.displayName}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {(["USD", "TRY"] as const).map((cur) => {
+                    const b = person[cur];
+                    if (b.debts.length === 0 && b.reductions.length === 0) return null;
+                    const { debtSum, paidSum, balance } = bucketSums(b);
+                    const ck = cardKey(person.key, cur);
+                    const st = getCardState(ck);
+                    return (
+                      <div key={cur} className="rounded-lg border border-border/80 bg-muted/20 p-4">
+                        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                          <span className="text-sm font-medium text-muted-foreground">{cur}</span>
+                          <div className="text-right text-sm">
+                            <span className="text-muted-foreground">Borç: </span>
+                            <span className="font-semibold">{formatMoney(debtSum, cur)}</span>
+                            <span className="mx-2 text-muted-foreground">·</span>
+                            <span className="text-muted-foreground">Düşülen: </span>
+                            <span className="font-semibold">{formatMoney(paidSum, cur)}</span>
+                            <span className="mx-2 text-muted-foreground">·</span>
+                            <span className="text-muted-foreground">Kalan: </span>
+                            <span className={`font-bold ${balance < -0.01 ? "text-amber-600" : "text-primary"}`}>
+                              {formatMoney(balance, cur)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {b.debts.length > 0 && (
+                          <div className="mb-3">
+                            <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">Borç satırları</p>
+                            <ul className="space-y-2">
+                              {b.debts.map((d) => (
+                                <li
+                                  key={d.id}
+                                  className="flex flex-col gap-2 rounded-md border border-border bg-background px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                                >
+                                  <div className="min-w-0">
+                                    <p className="font-semibold text-primary">{formatMoney(Number(d.amount), cur)}</p>
+                                    {d.description && (
+                                      <p className="text-xs text-muted-foreground">{d.description}</p>
+                                    )}
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="shrink-0 text-destructive hover:text-destructive"
+                                    onClick={() => void handleDelete(d.id)}
+                                  >
+                                    <Trash2 className="size-4" />
+                                    Sil
+                                  </Button>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
                         )}
-                      </p>
-                      {d.description && (
-                        <p className="mt-1 text-sm text-muted-foreground">{d.description}</p>
-                      )}
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="shrink-0 text-destructive hover:text-destructive"
-                      onClick={() => handleDelete(d.id)}
-                    >
-                      <Trash2 className="size-4" />
-                      Sil
-                    </Button>
-                  </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
+
+                        {b.reductions.length > 0 && (
+                          <div className="mb-3">
+                            <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">Düşüm kayıtları</p>
+                            <ul className="space-y-2">
+                              {b.reductions.map((r) => (
+                                <li
+                                  key={r.id}
+                                  className="flex flex-col gap-2 rounded-md border border-border bg-background px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                                >
+                                  <div className="min-w-0">
+                                    <p className="font-medium text-foreground">− {formatMoney(Number(r.amount), cur)}</p>
+                                    {r.description && (
+                                      <p className="text-xs text-muted-foreground">{r.description}</p>
+                                    )}
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="shrink-0 text-destructive hover:text-destructive"
+                                    onClick={() => void handleDeleteReduction(r.id)}
+                                  >
+                                    <Trash2 className="size-4" />
+                                    Sil
+                                  </Button>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {balance > 0.0001 && (
+                          <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:items-end">
+                            <div className="grid flex-1 gap-2 sm:grid-cols-2">
+                              <div className="space-y-1">
+                                <Label className="text-xs">Bu kişiden düş</Label>
+                                <Input
+                                  type="number"
+                                  inputMode="decimal"
+                                  min={0}
+                                  step="0.01"
+                                  placeholder="Tutar"
+                                  value={st.amount}
+                                  onChange={(e) => setCardField(ck, { amount: e.target.value })}
+                                  disabled={st.loading}
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Not</Label>
+                                <Input
+                                  placeholder="İsteğe bağlı"
+                                  value={st.desc}
+                                  onChange={(e) => setCardField(ck, { desc: e.target.value })}
+                                  disabled={st.loading}
+                                />
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              disabled={st.loading}
+                              className="gap-2 sm:mb-0"
+                              onClick={() =>
+                                void applyReduction(person.key, cur, st.amount, st.desc.trim() || null, ck)
+                              }
+                            >
+                              <MinusCircle className="size-4" />
+                              {st.loading ? "…" : "Düş"}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
