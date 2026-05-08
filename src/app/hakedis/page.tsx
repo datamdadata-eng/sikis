@@ -244,8 +244,9 @@ export default function HakedisPage() {
             <h1 className="text-2xl font-bold tracking-tight">Hakediş</h1>
             <p className="text-sm text-muted-foreground">
               Haftalık (İstanbul Pazartesi–Pazar): Kişi başı <strong className="text-foreground">hakediş %</strong>{" "}
-              kullanıcıda sabit kayıtlıdır; her hafta aynı oran uygulanır, tutar: o haftanın cirosu (satış + kapatıcı) × %
-              ÷ 100. JIN ve ARSIMET hafta satış toplamı üzerinden %; haftalık toplam % yalnızca kayıt / nottur.
+              kullanıcıda sabit; tutar, hakediş matrahı × % ÷ 100 (aynı satışta hem açıp hem kapattıysanız matrah iki
+              rol için 2×, tabloda gösterilen haftalık ciro ise işlem tutarı 1×). JIN ve ARSIMET hafta satış toplamı
+              üzerinden %; haftalık toplam % yalnızca kayıt / nottur.
             </p>
           </div>
           <div className="flex items-center gap-2">
