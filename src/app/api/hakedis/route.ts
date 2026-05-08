@@ -48,6 +48,29 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "week_bounds" }, { status: 500 });
   }
 
+  let rateRows: { user_id: number; role: string; rate_percent: string }[] = [];
+  try {
+    const r = await query<{ user_id: number; role: string; rate_percent: string }>(
+      `
+      SELECT user_id, role, rate_percent::text AS rate_percent
+      FROM hakedis_week_user_rate
+      WHERE week_start = $1::date
+    `,
+      [weekStart]
+    );
+    rateRows = r.rows;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!/hakedis_week_user_rate/i.test(msg) || !/does not exist/i.test(msg)) {
+      console.error("[hakedis GET rates]", e);
+    }
+  }
+
+  const rateMap = new Map<string, number>();
+  for (const row of rateRows) {
+    rateMap.set(`${row.user_id}:${row.role}`, Number(row.rate_percent));
+  }
+
   const [userRows, closerRows] = await Promise.all([
     query<{ user_id: number; user_name: string; total_amount: string }>(
       `
@@ -75,9 +98,6 @@ export async function GET(request: Request) {
     ),
   ]);
 
-  const salesTotalTry = userRows.rows.reduce((s, r) => s + Number(r.total_amount), 0);
-  const closerTotalTry = closerRows.rows.reduce((s, r) => s + Number(r.total_amount), 0);
-
   const fx = await fetchTryPerUsd();
 
   let weekTotalTry = "0";
@@ -99,20 +119,15 @@ export async function GET(request: Request) {
   let weekTotalPercent = 0;
   let jinPercent = 0;
   let arsimetPercent = 0;
-  let salesTotalPercent = 0;
-  let closerTotalPercent = 0;
 
   try {
     const ex = await query<{
       week_total_percent: string;
       jin_percent: string;
       arsimet_percent: string;
-      sales_total_percent: string;
-      closer_total_percent: string;
     }>(
       `
-      SELECT week_total_percent::text, jin_percent::text, arsimet_percent::text,
-             sales_total_percent::text, closer_total_percent::text
+      SELECT week_total_percent::text, jin_percent::text, arsimet_percent::text
       FROM hakedis_week_extras
       WHERE week_start = $1::date
     `,
@@ -122,34 +137,10 @@ export async function GET(request: Request) {
       weekTotalPercent = Number(ex.rows[0].week_total_percent);
       jinPercent = Number(ex.rows[0].jin_percent);
       arsimetPercent = Number(ex.rows[0].arsimet_percent);
-      salesTotalPercent = Number(ex.rows[0].sales_total_percent);
-      closerTotalPercent = Number(ex.rows[0].closer_total_percent);
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    if (/column "sales_total_percent"/i.test(msg) || /column "closer_total_percent"/i.test(msg)) {
-      try {
-        const ex = await query<{
-          week_total_percent: string;
-          jin_percent: string;
-          arsimet_percent: string;
-        }>(
-          `
-          SELECT week_total_percent::text, jin_percent::text, arsimet_percent::text
-          FROM hakedis_week_extras
-          WHERE week_start = $1::date
-        `,
-          [weekStart]
-        );
-        if (ex.rows[0]) {
-          weekTotalPercent = Number(ex.rows[0].week_total_percent);
-          jinPercent = Number(ex.rows[0].jin_percent);
-          arsimetPercent = Number(ex.rows[0].arsimet_percent);
-        }
-      } catch (inner) {
-        console.error("[hakedis GET extras legacy]", inner);
-      }
-    } else if (!/hakedis_week_extras/i.test(msg) || !/does not exist/i.test(msg)) {
+    if (!/hakedis_week_extras/i.test(msg) || !/does not exist/i.test(msg)) {
       console.error("[hakedis GET extras]", e);
     }
   }
@@ -157,25 +148,35 @@ export async function GET(request: Request) {
   const weekTotalNum = Number(weekTotalTry);
   const jinHakedisTry = (weekTotalNum * jinPercent) / 100;
   const arsimetHakedisTry = (weekTotalNum * arsimetPercent) / 100;
-  const salesHakedisTry = (salesTotalTry * salesTotalPercent) / 100;
-  const closerHakedisTry = (closerTotalTry * closerTotalPercent) / 100;
+
+  const users = userRows.rows.map((row) => {
+    const total = Number(row.total_amount);
+    const percentage = rateMap.get(`${row.user_id}:sales`) ?? 0;
+    const hakedisTry = (total * percentage) / 100;
+    return {
+      ...row,
+      percentage,
+      hakedis_try: hakedisTry.toFixed(2),
+    };
+  });
+
+  const closers = closerRows.rows.map((row) => {
+    const total = Number(row.total_amount);
+    const percentage = rateMap.get(`${row.closer_id}:closer`) ?? 0;
+    const hakedisTry = (total * percentage) / 100;
+    return {
+      ...row,
+      percentage,
+      hakedis_try: hakedisTry.toFixed(2),
+    };
+  });
 
   return NextResponse.json({
     weekStart,
     weekEnd,
     weekOffset,
-    users: [] as unknown[],
-    closers: [] as unknown[],
-    salesSummary: {
-      total_amount: salesTotalTry.toFixed(2),
-      percentage: salesTotalPercent,
-      hakedis_try: salesHakedisTry.toFixed(2),
-    },
-    closerSummary: {
-      total_amount: closerTotalTry.toFixed(2),
-      percentage: closerTotalPercent,
-      hakedis_try: closerHakedisTry.toFixed(2),
-    },
+    users,
+    closers,
     extras: {
       weekTotalTry,
       weekTotalPercent,
