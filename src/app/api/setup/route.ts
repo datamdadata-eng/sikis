@@ -101,9 +101,18 @@ export async function POST() {
         week_total_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
         jin_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
         arsimet_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
+        sales_total_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
+        closer_total_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
         updated_at TIMESTAMPTZ DEFAULT now()
       );
     `);
+
+    await query(
+      `ALTER TABLE hakedis_week_extras ADD COLUMN IF NOT EXISTS sales_total_percent NUMERIC(6,2) NOT NULL DEFAULT 0;`
+    );
+    await query(
+      `ALTER TABLE hakedis_week_extras ADD COLUMN IF NOT EXISTS closer_total_percent NUMERIC(6,2) NOT NULL DEFAULT 0;`
+    );
 
     await query(`
       CREATE TABLE IF NOT EXISTS debt_reductions (
