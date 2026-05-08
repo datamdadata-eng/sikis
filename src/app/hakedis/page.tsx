@@ -251,7 +251,8 @@ export default function HakedisPage() {
             <CardContent className="flex flex-wrap items-center gap-2 py-3 text-sm text-muted-foreground">
               <CircleDollarSign className="size-4 text-primary" />
               <span>
-                Güncel kur (Frankfurter ECB): <strong className="text-foreground">1 USD = {formatNumberTr(data.tryPerUsd)} ₺</strong>
+                Güncel kur (Frankfurter, her yüklemede API):{" "}
+                <strong className="text-foreground">1 USD = {formatNumberTr(data.tryPerUsd)} ₺</strong>
                 {data.fxDate && <span className="ml-1">({data.fxDate})</span>}
               </span>
             </CardContent>

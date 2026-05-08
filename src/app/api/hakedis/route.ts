@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 
+/** Her istekte güncel kur (önbellek yok). */
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type Frankfurter = { rates?: { TRY?: number }; date?: string };
 
 async function fetchTryPerUsd(): Promise<{ tryPerUsd: number; fxDate: string | null; error?: string }> {
   try {
     const res = await fetch("https://api.frankfurter.app/latest?from=USD&to=TRY", {
-      next: { revalidate: 3600 },
+      cache: "no-store",
     });
     if (!res.ok) return { tryPerUsd: 0, fxDate: null, error: "fx_unavailable" };
     const data = (await res.json()) as Frankfurter;
