@@ -57,6 +57,15 @@ export async function POST() {
       );
     `);
 
+    await query(`ALTER TABLE debts ADD COLUMN IF NOT EXISTS currency TEXT;`);
+    await query(`UPDATE debts SET currency = 'TRY' WHERE currency IS NULL;`);
+    await query(`ALTER TABLE debts ALTER COLUMN currency SET DEFAULT 'USD';`);
+    await query(`ALTER TABLE debts ALTER COLUMN currency SET NOT NULL;`);
+    await query(`ALTER TABLE debts DROP CONSTRAINT IF EXISTS debts_currency_check;`);
+    await query(
+      `ALTER TABLE debts ADD CONSTRAINT debts_currency_check CHECK (currency IN ('TRY', 'USD'));`
+    );
+
     await query(`
       CREATE TABLE IF NOT EXISTS admins (
         id SERIAL PRIMARY KEY,
@@ -74,6 +83,17 @@ export async function POST() {
     `,
       ["jin", "maslak1453"],
     );
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS hakedis_week_user_rate (
+        week_start DATE NOT NULL,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        role TEXT NOT NULL CHECK (role IN ('sales', 'closer')),
+        rate_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
+        updated_at TIMESTAMPTZ DEFAULT now(),
+        PRIMARY KEY (week_start, user_id, role)
+      );
+    `);
 
     return NextResponse.json({ ok: true });
   } catch (e) {

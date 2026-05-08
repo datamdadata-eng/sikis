@@ -19,15 +19,21 @@ type Debt = {
   person_name: string;
   amount: string;
   description: string | null;
+  currency?: "USD" | "TRY";
   created_at?: string;
 };
 
 const formatNumberTr = (value: number) =>
   new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(value);
 
-const parseTrAmountToNumber = (value: string): number => {
-  const cleaned = value.replace(/\./g, "").replace(/\s/g, "");
-  return Number(cleaned || "0");
+const formatUsd = (value: number) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
+
+const debtCurrency = (d: Debt): "USD" | "TRY" => (d.currency === "TRY" ? "TRY" : "USD");
+
+const parseUsdInput = (value: string): number => {
+  const n = Number(String(value).trim().replace(",", "."));
+  return Number.isFinite(n) ? n : NaN;
 };
 
 export default function BorcPage() {
@@ -35,7 +41,7 @@ export default function BorcPage() {
   const [currentUserName, setCurrentUserName] = useState<string | null>(null);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [personName, setPersonName] = useState("");
-  const [amountStr, setAmountStr] = useState("");
+  const [amountUsd, setAmountUsd] = useState("");
   const [desc, setDesc] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,17 +92,18 @@ export default function BorcPage() {
     setCurrentUserName(null);
   };
 
-  const totalBorc = debts.reduce((sum, d) => sum + Number(d.amount ?? 0), 0);
+  const totalUsd = debts.filter((d) => debtCurrency(d) === "USD").reduce((sum, d) => sum + Number(d.amount ?? 0), 0);
+  const totalTry = debts.filter((d) => debtCurrency(d) === "TRY").reduce((sum, d) => sum + Number(d.amount ?? 0), 0);
 
   const handleAdd = async () => {
     const name = personName.trim();
-    const amount = parseTrAmountToNumber(amountStr);
+    const amount = parseUsdInput(amountUsd);
     if (!name) {
       setError("Kişi adı girin.");
       return;
     }
-    if (amount <= 0) {
-      setError("Geçerli bir tutar girin.");
+    if (Number.isNaN(amount) || amount <= 0) {
+      setError("Geçerli bir dolar tutarı girin.");
       return;
     }
     setError(null);
@@ -108,6 +115,7 @@ export default function BorcPage() {
         body: JSON.stringify({
           personName: name,
           amount,
+          currency: "USD",
           description: desc.trim() || null,
         }),
       });
@@ -121,7 +129,7 @@ export default function BorcPage() {
         return;
       }
       setPersonName("");
-      setAmountStr("");
+      setAmountUsd("");
       setDesc("");
       await loadDebts();
     } catch {
@@ -210,8 +218,14 @@ export default function BorcPage() {
 
         <Card className="mb-6 border-primary/30">
           <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Toplam borç</p>
-            <p className="text-3xl font-bold text-primary">{formatNumberTr(totalBorc)} ₺</p>
+            <p className="text-sm text-muted-foreground">Toplam borç (USD)</p>
+            <p className="text-3xl font-bold text-primary">{formatUsd(totalUsd)}</p>
+            {totalTry > 0 && (
+              <p className="mt-2 text-sm text-muted-foreground">
+                Eski TL kayıtları toplamı:{" "}
+                <span className="font-semibold text-foreground">{formatNumberTr(totalTry)} ₺</span>
+              </p>
+            )}
             <p className="mt-1 text-xs text-muted-foreground">{debts.length} kayıt</p>
           </CardContent>
         </Card>
@@ -233,19 +247,15 @@ export default function BorcPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Tutar (₺)</Label>
+                <Label>Tutar (USD)</Label>
                 <Input
-                  placeholder="0"
-                  value={amountStr}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    const digitsOnly = raw.replace(/\D/g, "");
-                    if (!digitsOnly) {
-                      setAmountStr("");
-                      return;
-                    }
-                    setAmountStr(formatNumberTr(Number(digitsOnly)));
-                  }}
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step="0.01"
+                  placeholder="0.00"
+                  value={amountUsd}
+                  onChange={(e) => setAmountUsd(e.target.value)}
                 />
               </div>
               <div className="space-y-2 sm:col-span-2">
@@ -281,7 +291,14 @@ export default function BorcPage() {
                   >
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold uppercase text-foreground">{d.person_name}</p>
-                      <p className="text-lg font-bold text-primary">{formatNumberTr(Number(d.amount))} ₺</p>
+                      <p className="text-lg font-bold text-primary">
+                        {debtCurrency(d) === "USD"
+                          ? formatUsd(Number(d.amount))
+                          : `${formatNumberTr(Number(d.amount))} ₺`}
+                        {debtCurrency(d) === "TRY" && (
+                          <span className="ml-2 text-xs font-normal text-muted-foreground">(eski TL)</span>
+                        )}
+                      </p>
                       {d.description && (
                         <p className="mt-1 text-sm text-muted-foreground">{d.description}</p>
                       )}
