@@ -19,23 +19,13 @@ const formatNumberTr = (value: number) =>
 const formatUsd = (value: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
 
-type SalesRow = {
+type PersonRow = {
   user_id: number;
   user_name: string;
+  /** Haftalık ciro: satış yapan + kapatıcı olarak geçen tutarlar toplamı */
   total_amount: string;
-  /** Kayıtlı havuz ağırlığı (yüzde / puan); toplamı 100 olmak zorunda değil */
+  /** Kayıtlı hakediş % */
   rate_percent: number;
-  /** Havuzdan gerçekleşen pay % (ağırlıklara göre orantılı) veya ağırlık yoksa ciro payı */
-  share_percent: number;
-  hakedis_try: string;
-};
-
-type CloserRow = {
-  closer_id: number;
-  closer_name: string;
-  total_amount: string;
-  rate_percent: number;
-  share_percent: number;
   hakedis_try: string;
 };
 
@@ -46,16 +36,13 @@ type HakedisExtras = {
   arsimetPercent: number;
   jinHakedisTry: string;
   arsimetHakedisTry: string;
-  salesHakedisPoolTry: string;
-  closerHakedisPoolTry: string;
 };
 
 type HakedisData = {
   weekStart: string;
   weekEnd: string;
   weekOffset: number;
-  users: SalesRow[];
-  closers: CloserRow[];
+  people: PersonRow[];
   extras?: HakedisExtras;
   tryPerUsd: number;
   fxDate: string | null;
@@ -126,8 +113,6 @@ export default function HakedisPage() {
     weekTotalPercent?: number;
     jinPercent?: number;
     arsimetPercent?: number;
-    salesHakedisPoolTry?: number;
-    closerHakedisPoolTry?: number;
   }) => {
     if (!data) return;
     const token = typeof window !== "undefined" ? window.localStorage.getItem("satistakip-token") : null;
@@ -137,11 +122,7 @@ export default function HakedisPage() {
         ? "extras:week"
         : partial.jinPercent !== undefined
           ? "extras:jin"
-          : partial.arsimetPercent !== undefined
-            ? "extras:arsimet"
-            : partial.salesHakedisPoolTry !== undefined
-              ? "extras:sales-pool"
-              : "extras:closer-pool";
+          : "extras:arsimet";
     setSavingKey(sk);
     try {
       const res = await fetch("/api/hakedis/extras", {
@@ -169,20 +150,13 @@ export default function HakedisPage() {
       ? `${new Date(data.weekStart + "T12:00:00").toLocaleDateString("tr-TR", { day: "numeric", month: "long" })} – ${new Date(data.weekEnd + "T12:00:00").toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })}`
       : "";
 
-  const totalUsersTry =
-    data?.users.reduce((s, r) => s + Number(r.total_amount ?? 0), 0) ?? 0;
-  const totalClosersTry =
-    data?.closers.reduce((s, r) => s + Number(r.total_amount ?? 0), 0) ?? 0;
+  const totalPeopleCiro =
+    data?.people.reduce((s, r) => s + Number(r.total_amount ?? 0), 0) ?? 0;
 
-  const saveRate = async (opts: {
-    weekStart: string;
-    userId: number;
-    role: "sales" | "closer";
-    percentage: number;
-  }) => {
+  const saveRate = async (opts: { weekStart: string; userId: number; percentage: number }) => {
     const token = typeof window !== "undefined" ? window.localStorage.getItem("satistakip-token") : null;
     if (!token) return;
-    const key = `${opts.userId}:${opts.role}`;
+    const key = `person:${opts.userId}`;
     setSavingKey(key);
     try {
       const res = await fetch("/api/hakedis/rate", {
@@ -194,8 +168,9 @@ export default function HakedisPage() {
         body: JSON.stringify({
           weekStart: opts.weekStart,
           userId: opts.userId,
-          role: opts.role,
+          role: "sales",
           percentage: opts.percentage,
+          unified: true,
         }),
       });
       if (res.ok) {
@@ -274,10 +249,10 @@ export default function HakedisPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Hakediş</h1>
             <p className="text-sm text-muted-foreground">
-              Haftalık (İstanbul Pazartesi–Pazar): Açıcı (satış yapan) ve kapatıcı için her kişiye{" "}
-              <strong className="text-foreground">hakediş ağırlığı %</strong> girersiniz; havuz bu ağırlıklara orantılı
-              bölünür (toplamı 100 olmak zorunda değil). Ağırlıkların hepsi 0 ise dağıtım o grubun cirosuna göre yapılır.
-              JIN ve ARSIMET hafta toplamı üzerinden %; haftalık toplam % yalnızca kayıt / nottur.
+              Haftalık (İstanbul Pazartesi–Pazar): Her kişi için o haftanın{" "}
+              <strong className="text-foreground">toplam cirosuna</strong> (satış yapan + kapatıcı){" "}
+              <strong className="text-foreground">hakediş %</strong> kaydedersiniz; tutar otomatik: ciro × % ÷ 100. JIN
+              ve ARSIMET hafta satış toplamı üzerinden %; haftalık toplam % yalnızca kayıt / nottur.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -331,17 +306,12 @@ export default function HakedisPage() {
               arsimetPercent: 0,
               jinHakedisTry: "0",
               arsimetHakedisTry: "0",
-              salesHakedisPoolTry: "0.00",
-              closerHakedisPoolTry: "0.00",
             };
             const wtt = Number(ex.weekTotalTry);
             const usdWeek = tryToUsd(wtt);
-            const totalSalesHakedisTry = data.users.reduce((s, r) => s + Number(r.hakedis_try), 0);
-            const totalCloserHakedisTry = data.closers.reduce((s, r) => s + Number(r.hakedis_try), 0);
-            const sumSalesRates = data.users.reduce((s, r) => s + Number(r.rate_percent ?? 0), 0);
-            const sumCloserRates = data.closers.reduce((s, r) => s + Number(r.rate_percent ?? 0), 0);
+            const totalPeopleHakedisTry = data.people.reduce((s, r) => s + Number(r.hakedis_try), 0);
             const weekHakedisGrandTry =
-              totalSalesHakedisTry + totalCloserHakedisTry + Number(ex.jinHakedisTry) + Number(ex.arsimetHakedisTry);
+              totalPeopleHakedisTry + Number(ex.jinHakedisTry) + Number(ex.arsimetHakedisTry);
             const usdWeekHakedisGrand = tryToUsd(weekHakedisGrandTry);
             return (
               <div className="space-y-6">
@@ -444,286 +414,104 @@ export default function HakedisPage() {
                 </Card>
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg">Açıcı (satış yapan) · Kapatıcı</CardTitle>
+                    <CardTitle className="text-lg">Kişi hakedişi</CardTitle>
                     <p className="text-xs text-muted-foreground">
-                      Her grubun hakediş havuzu (₺), satırdaki <strong className="text-foreground">ağırlık %</strong>{" "}
-                      oranında bölünür. Ağırlık toplamı 0 ise o grupta dağıtım ciroya göre yapılır. Ciro bilgi amaçlıdır.
+                      Ciro: bu hafta satış yapan ve kapatıcı olarak geçen tutarların toplamı. Hakediş ₺ = ciro × hakediş
+                      % ÷ 100.
                     </p>
                   </CardHeader>
                   <CardContent className="space-y-0 p-0">
-                    <div className="border-b border-border">
-                      <div className="space-y-3 px-4 pb-3 pt-1 sm:px-6">
-                        <h3 className="text-sm font-semibold text-foreground">Açıcı (satış yapan)</h3>
-                        <p className="text-xs text-muted-foreground">
-                          Grup ciro toplamı: {formatNumberTr(totalUsersTry)} ₺.
-                        </p>
-                        <div className="space-y-1">
-                          <Label htmlFor="sales-pool" className="text-xs text-muted-foreground">
-                            Hakediş havuzu (₺)
-                          </Label>
-                          <Input
-                            id="sales-pool"
-                            type="number"
-                            min={0}
-                            step={0.01}
-                            className="h-9 max-w-xs"
-                            defaultValue={ex.salesHakedisPoolTry}
-                            key={`${data.weekStart}-sales-pool-${ex.salesHakedisPoolTry}`}
-                            disabled={savingKey === "extras:sales-pool"}
-                            onBlur={(e) => {
-                              const v = Number(e.target.value);
-                              if (Number.isNaN(v) || v < 0) {
-                                e.target.value = ex.salesHakedisPoolTry;
-                                return;
-                              }
-                              const prev = Number(ex.salesHakedisPoolTry);
-                              if (Math.abs(v - prev) < 1e-6) return;
-                              void saveExtras({ salesHakedisPoolTry: v });
-                            }}
-                          />
-                        </div>
-                      </div>
-                      <div className="hidden border-y border-border bg-muted/40 px-4 py-2 text-[11px] font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,4.5rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6">
-                        <span>İsim</span>
-                        <span className="text-right">Haftalık ciro</span>
-                        <span className="text-center" title="Havuzdan alınacak payı belirleyen ağırlık (kayıtlı)">
-                          Ağırlık %
-                        </span>
-                        <span className="text-center" title="Havuzun bu kişiye düşen oranı (hesaplanan)">
-                          Havuz payı %
-                        </span>
-                        <span className="text-right">Hakediş</span>
-                      </div>
-                      <div className="divide-y divide-border">
-                        {data.users.length === 0 ? (
-                          <p className="px-4 py-6 text-center text-sm text-muted-foreground sm:px-6">Bu hafta kayıt yok.</p>
-                        ) : (
-                          data.users.map((r) => {
-                            const tl = Number(r.total_amount);
-                            const hk = Number(r.hakedis_try);
-                            const usdCiro = tryToUsd(tl);
-                            const usdHakedis = tryToUsd(hk);
-                            const saveKey = `${r.user_id}:sales`;
-                            return (
-                              <div
-                                key={r.user_id}
-                                className="flex flex-col gap-3 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,4.5rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6"
-                              >
-                                <span className="font-semibold uppercase text-foreground">{r.user_name}</span>
-                                <div className="flex flex-wrap items-center justify-between gap-2 sm:block sm:text-right">
-                                  <span className="text-xs text-muted-foreground sm:hidden">Ciro</span>
-                                  <p className="font-bold text-primary">{formatNumberTr(tl)} ₺</p>
-                                  {usdCiro != null && (
-                                    <p className="text-xs text-muted-foreground sm:text-right">{formatUsd(usdCiro)}</p>
-                                  )}
-                                </div>
-                                <div className="flex items-center justify-center gap-2 sm:justify-center">
-                                  <span className="text-xs text-muted-foreground sm:hidden">Ağırlık %</span>
-                                  <Input
-                                    type="number"
-                                    min={0}
-                                    max={9999.99}
-                                    step={0.01}
-                                    className="h-9 w-20"
-                                    defaultValue={r.rate_percent}
-                                    key={`${data.weekStart}-${r.user_id}-sales-rate-${r.rate_percent}`}
-                                    disabled={savingKey === saveKey}
-                                    onBlur={(e) => {
-                                      const v = Number(e.target.value);
-                                      if (Number.isNaN(v) || v < 0 || v > 9999.99) {
-                                        e.target.value = String(r.rate_percent);
-                                        return;
-                                      }
-                                      if (Math.abs(v - r.rate_percent) < 1e-6) return;
-                                      void saveRate({
-                                        weekStart: data.weekStart,
-                                        userId: r.user_id,
-                                        role: "sales",
-                                        percentage: v,
-                                      });
-                                    }}
-                                  />
-                                </div>
-                                <div className="text-center sm:text-center">
-                                  <span className="text-xs text-muted-foreground sm:hidden">Havuz payı %</span>
-                                  <p className="text-sm font-medium tabular-nums text-foreground">
-                                    {formatNumberTr(r.share_percent)} %
-                                  </p>
-                                </div>
-                                <div className="text-right">
-                                  <p className="text-sm font-semibold text-foreground">{formatNumberTr(hk)} ₺</p>
-                                  {usdHakedis != null && (
-                                    <p className="text-xs text-muted-foreground">{formatUsd(usdHakedis)}</p>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })
-                        )}
-                        {data.users.length > 0 && (
-                          <div className="flex flex-col gap-2 border-t border-border bg-muted/45 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,4.5rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6">
-                            <span className="text-sm font-semibold text-foreground">Toplam (açıcı)</span>
-                            <p className="text-right text-sm font-bold text-primary sm:text-right">
-                              {formatNumberTr(totalUsersTry)} ₺
-                            </p>
-                            <p className="text-center text-sm font-semibold tabular-nums text-foreground sm:text-center">
-                              {formatNumberTr(sumSalesRates)}
-                            </p>
-                            <p className="text-center text-sm font-semibold tabular-nums text-foreground sm:text-center">
-                              {sumSalesRates > 0 ? "100" : totalUsersTry > 0 ? "100" : "0"} %
-                            </p>
-                            <div className="text-right">
-                              <p className="text-sm font-bold text-foreground">{formatNumberTr(totalSalesHakedisTry)} ₺</p>
-                              {tryToUsd(totalSalesHakedisTry) != null && (
-                                <p className="text-xs text-muted-foreground">{formatUsd(tryToUsd(totalSalesHakedisTry)!)}</p>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                    <div className="hidden border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_5.5rem_minmax(0,1fr)] sm:items-center sm:gap-3 sm:px-6">
+                      <span>İsim</span>
+                      <span className="text-right">Haftalık ciro (toplam)</span>
+                      <span className="text-center">Hakediş %</span>
+                      <span className="text-right">Hakediş tutarı</span>
                     </div>
-
-                    <div>
-                      <div className="space-y-3 px-4 pb-3 pt-5 sm:px-6">
-                        <h3 className="text-sm font-semibold text-foreground">Kapatıcı</h3>
-                        <p className="text-xs text-muted-foreground">
-                          Grup ciro toplamı: {formatNumberTr(totalClosersTry)} ₺.
+                    <div className="divide-y divide-border">
+                      {data.people.length === 0 ? (
+                        <p className="px-4 py-6 text-center text-sm text-muted-foreground sm:px-6">
+                          Bu hafta satış kaydı yok.
                         </p>
-                        <div className="space-y-1">
-                          <Label htmlFor="closer-pool" className="text-xs text-muted-foreground">
-                            Hakediş havuzu (₺)
-                          </Label>
-                          <Input
-                            id="closer-pool"
-                            type="number"
-                            min={0}
-                            step={0.01}
-                            className="h-9 max-w-xs"
-                            defaultValue={ex.closerHakedisPoolTry}
-                            key={`${data.weekStart}-closer-pool-${ex.closerHakedisPoolTry}`}
-                            disabled={savingKey === "extras:closer-pool"}
-                            onBlur={(e) => {
-                              const v = Number(e.target.value);
-                              if (Number.isNaN(v) || v < 0) {
-                                e.target.value = ex.closerHakedisPoolTry;
-                                return;
-                              }
-                              const prev = Number(ex.closerHakedisPoolTry);
-                              if (Math.abs(v - prev) < 1e-6) return;
-                              void saveExtras({ closerHakedisPoolTry: v });
-                            }}
-                          />
-                        </div>
-                      </div>
-                      <div className="hidden border-y border-border bg-muted/40 px-4 py-2 text-[11px] font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,4.5rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6">
-                        <span>İsim</span>
-                        <span className="text-right">Haftalık ciro</span>
-                        <span className="text-center" title="Havuzdan alınacak payı belirleyen ağırlık (kayıtlı)">
-                          Ağırlık %
-                        </span>
-                        <span className="text-center" title="Havuzun bu kişiye düşen oranı (hesaplanan)">
-                          Havuz payı %
-                        </span>
-                        <span className="text-right">Hakediş</span>
-                      </div>
-                      <div className="divide-y divide-border">
-                        {data.closers.length === 0 ? (
-                          <p className="px-4 py-6 text-center text-sm text-muted-foreground sm:px-6">
-                            Bu hafta kapatıcı kaydı yok.
-                          </p>
-                        ) : (
-                          data.closers.map((r) => {
-                            const tl = Number(r.total_amount);
-                            const hk = Number(r.hakedis_try);
-                            const usdCiro = tryToUsd(tl);
-                            const usdHakedis = tryToUsd(hk);
-                            const saveKey = `${r.closer_id}:closer`;
-                            return (
-                              <div
-                                key={r.closer_id}
-                                className="flex flex-col gap-3 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,4.5rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6"
-                              >
-                                <span className="font-semibold uppercase text-foreground">{r.closer_name}</span>
-                                <div className="flex flex-wrap items-center justify-between gap-2 sm:block sm:text-right">
-                                  <span className="text-xs text-muted-foreground sm:hidden">Ciro</span>
-                                  <p className="font-bold text-primary">{formatNumberTr(tl)} ₺</p>
-                                  {usdCiro != null && (
-                                    <p className="text-xs text-muted-foreground sm:text-right">{formatUsd(usdCiro)}</p>
-                                  )}
-                                </div>
-                                <div className="flex items-center justify-center gap-2 sm:justify-center">
-                                  <span className="text-xs text-muted-foreground sm:hidden">Ağırlık %</span>
-                                  <Input
-                                    type="number"
-                                    min={0}
-                                    max={9999.99}
-                                    step={0.01}
-                                    className="h-9 w-20"
-                                    defaultValue={r.rate_percent}
-                                    key={`${data.weekStart}-${r.closer_id}-closer-rate-${r.rate_percent}`}
-                                    disabled={savingKey === saveKey}
-                                    onBlur={(e) => {
-                                      const v = Number(e.target.value);
-                                      if (Number.isNaN(v) || v < 0 || v > 9999.99) {
-                                        e.target.value = String(r.rate_percent);
-                                        return;
-                                      }
-                                      if (Math.abs(v - r.rate_percent) < 1e-6) return;
-                                      void saveRate({
-                                        weekStart: data.weekStart,
-                                        userId: r.closer_id,
-                                        role: "closer",
-                                        percentage: v,
-                                      });
-                                    }}
-                                  />
-                                </div>
-                                <div className="text-center sm:text-center">
-                                  <span className="text-xs text-muted-foreground sm:hidden">Havuz payı %</span>
-                                  <p className="text-sm font-medium tabular-nums text-foreground">
-                                    {formatNumberTr(r.share_percent)} %
-                                  </p>
-                                </div>
-                                <div className="text-right">
-                                  <p className="text-sm font-semibold text-foreground">{formatNumberTr(hk)} ₺</p>
-                                  {usdHakedis != null && (
-                                    <p className="text-xs text-muted-foreground">{formatUsd(usdHakedis)}</p>
-                                  )}
-                                </div>
+                      ) : (
+                        data.people.map((r) => {
+                          const tl = Number(r.total_amount);
+                          const hk = Number(r.hakedis_try);
+                          const usdCiro = tryToUsd(tl);
+                          const usdHakedis = tryToUsd(hk);
+                          const saveKey = `person:${r.user_id}`;
+                          return (
+                            <div
+                              key={r.user_id}
+                              className="flex flex-col gap-3 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_5.5rem_minmax(0,1fr)] sm:items-center sm:gap-3 sm:px-6"
+                            >
+                              <span className="font-semibold uppercase text-foreground">{r.user_name}</span>
+                              <div className="flex flex-wrap items-center justify-between gap-2 sm:block sm:text-right">
+                                <span className="text-xs text-muted-foreground sm:hidden">Ciro</span>
+                                <p className="font-bold text-primary">{formatNumberTr(tl)} ₺</p>
+                                {usdCiro != null && (
+                                  <p className="text-xs text-muted-foreground sm:text-right">{formatUsd(usdCiro)}</p>
+                                )}
                               </div>
-                            );
-                          })
-                        )}
-                        {data.closers.length > 0 && (
-                          <div className="flex flex-col gap-2 border-t border-border bg-muted/45 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,4.5rem)_minmax(0,4.5rem)_minmax(0,1fr)] sm:items-center sm:gap-2 sm:px-6">
-                            <span className="text-sm font-semibold text-foreground">Toplam (kapatıcı)</span>
-                            <p className="text-right text-sm font-bold text-primary sm:text-right">
-                              {formatNumberTr(totalClosersTry)} ₺
-                            </p>
-                            <p className="text-center text-sm font-semibold tabular-nums text-foreground sm:text-center">
-                              {formatNumberTr(sumCloserRates)}
-                            </p>
-                            <p className="text-center text-sm font-semibold tabular-nums text-foreground sm:text-center">
-                              {sumCloserRates > 0 ? "100" : totalClosersTry > 0 ? "100" : "0"} %
-                            </p>
-                            <div className="text-right">
-                              <p className="text-sm font-bold text-foreground">{formatNumberTr(totalCloserHakedisTry)} ₺</p>
-                              {tryToUsd(totalCloserHakedisTry) != null && (
-                                <p className="text-xs text-muted-foreground">{formatUsd(tryToUsd(totalCloserHakedisTry)!)}</p>
-                              )}
+                              <div className="flex items-center justify-center gap-2 sm:justify-center">
+                                <span className="text-xs text-muted-foreground sm:hidden">Hakediş %</span>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  step={0.01}
+                                  className="h-9 w-24"
+                                  defaultValue={r.rate_percent}
+                                  key={`${data.weekStart}-${r.user_id}-rate-${r.rate_percent}`}
+                                  disabled={savingKey === saveKey}
+                                  onBlur={(e) => {
+                                    const v = Number(e.target.value);
+                                    if (Number.isNaN(v) || v < 0 || v > 100) {
+                                      e.target.value = String(r.rate_percent);
+                                      return;
+                                    }
+                                    if (Math.abs(v - r.rate_percent) < 1e-6) return;
+                                    void saveRate({
+                                      weekStart: data.weekStart,
+                                      userId: r.user_id,
+                                      percentage: v,
+                                    });
+                                  }}
+                                />
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-semibold text-foreground">{formatNumberTr(hk)} ₺</p>
+                                {usdHakedis != null && (
+                                  <p className="text-xs text-muted-foreground">{formatUsd(usdHakedis)}</p>
+                                )}
+                              </div>
                             </div>
+                          );
+                        })
+                      )}
+                      {data.people.length > 0 && (
+                        <div className="flex flex-col gap-2 border-t border-border bg-muted/45 px-4 py-3 sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_5.5rem_minmax(0,1fr)] sm:items-center sm:gap-3 sm:px-6">
+                          <span className="text-sm font-semibold text-foreground">Toplam</span>
+                          <p className="text-right text-sm font-bold text-primary sm:text-right">
+                            {formatNumberTr(totalPeopleCiro)} ₺
+                          </p>
+                          <p className="text-center text-sm font-semibold tabular-nums text-muted-foreground sm:text-center">
+                            —
+                          </p>
+                          <div className="text-right">
+                            <p className="text-sm font-bold text-foreground">{formatNumberTr(totalPeopleHakedisTry)} ₺</p>
+                            {tryToUsd(totalPeopleHakedisTry) != null && (
+                              <p className="text-xs text-muted-foreground">{formatUsd(tryToUsd(totalPeopleHakedisTry)!)}</p>
+                            )}
                           </div>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="border-t border-primary/20 bg-primary/5 px-4 py-4 sm:px-6">
                       <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
                         <div>
                           <p className="text-sm font-semibold text-foreground">Bu hafta hakediş toplamı</p>
-                          <p className="text-xs text-muted-foreground">
-                            Açıcı + Kapatıcı + JIN + ARSIMET (₺)
-                          </p>
+                          <p className="text-xs text-muted-foreground">Kişiler + JIN + ARSIMET (₺)</p>
                         </div>
                         <div className="text-left sm:text-right">
                           <p className="text-xl font-bold tabular-nums text-primary">{formatNumberTr(weekHakedisGrandTry)} ₺</p>

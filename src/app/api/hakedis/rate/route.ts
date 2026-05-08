@@ -29,6 +29,7 @@ export async function POST(request: Request) {
   const userId = Number(body.userId);
   const role = body.role === "closer" ? "closer" : "sales";
   const percentage = Number(body.percentage);
+  const unified = body.unified === true;
 
   if (!DATE_RE.test(weekStart)) {
     return NextResponse.json({ error: "invalid_week_start" }, { status: 400 });
@@ -36,21 +37,41 @@ export async function POST(request: Request) {
   if (!Number.isInteger(userId) || userId < 1) {
     return NextResponse.json({ error: "invalid_user" }, { status: 400 });
   }
-  /** Havuz ağırlığı (0–9999,99); toplamı 100 olmak zorunda değil, havuz orantılı bölünür. */
-  if (Number.isNaN(percentage) || percentage < 0 || percentage > 9999.99) {
+  if (Number.isNaN(percentage) || percentage < 0 || percentage > 100) {
     return NextResponse.json({ error: "invalid_percentage" }, { status: 400 });
   }
 
   try {
-    await query(
-      `
-      INSERT INTO hakedis_week_user_rate (week_start, user_id, role, rate_percent)
-      VALUES ($1::date, $2, $3, $4)
-      ON CONFLICT (week_start, user_id, role)
-      DO UPDATE SET rate_percent = EXCLUDED.rate_percent, updated_at = now()
-    `,
-      [weekStart, userId, role, percentage]
-    );
+    if (unified) {
+      await query(
+        `
+        INSERT INTO hakedis_week_user_rate (week_start, user_id, role, rate_percent)
+        VALUES ($1::date, $2, 'sales', $3)
+        ON CONFLICT (week_start, user_id, role)
+        DO UPDATE SET rate_percent = EXCLUDED.rate_percent, updated_at = now()
+      `,
+        [weekStart, userId, percentage]
+      );
+      await query(
+        `
+        INSERT INTO hakedis_week_user_rate (week_start, user_id, role, rate_percent)
+        VALUES ($1::date, $2, 'closer', $3)
+        ON CONFLICT (week_start, user_id, role)
+        DO UPDATE SET rate_percent = EXCLUDED.rate_percent, updated_at = now()
+      `,
+        [weekStart, userId, percentage]
+      );
+    } else {
+      await query(
+        `
+        INSERT INTO hakedis_week_user_rate (week_start, user_id, role, rate_percent)
+        VALUES ($1::date, $2, $3, $4)
+        ON CONFLICT (week_start, user_id, role)
+        DO UPDATE SET rate_percent = EXCLUDED.rate_percent, updated_at = now()
+      `,
+        [weekStart, userId, role, percentage]
+      );
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
