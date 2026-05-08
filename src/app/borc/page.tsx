@@ -21,6 +21,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { canonicalPersonKey } from "@/lib/person-name-key";
 
 type Debt = {
   id: number;
@@ -72,24 +73,35 @@ function buildPeople(debts: Debt[], reductions: Reduction[]): PersonBuckets[] {
   const m = new Map<string, PersonBuckets>();
   const emptyBucket = (): Bucket => ({ debts: [], reductions: [] });
 
+  const pickDisplay = (prev: string, next: string) => {
+    const a = prev.trim();
+    const b = next.trim();
+    if (!a) return b;
+    if (!b) return a;
+    // Daha uzun / daha çok harf içeren (Türkçe İ vb.) görünen adı tercih et
+    if (b.length > a.length) return b;
+    return a;
+  };
+
   for (const d of debts) {
-    const key = d.person_name.trim().toUpperCase();
+    const key = canonicalPersonKey(d.person_name);
     if (!key) continue;
     if (!m.has(key)) {
       m.set(key, { key, displayName: d.person_name.trim(), USD: emptyBucket(), TRY: emptyBucket() });
     }
     const p = m.get(key)!;
-    p.displayName = d.person_name.trim();
+    p.displayName = pickDisplay(p.displayName, d.person_name);
     const cur = debtCurrency(d);
     p[cur].debts.push(d);
   }
   for (const r of reductions) {
-    const key = r.person_name.trim().toUpperCase();
+    const key = canonicalPersonKey(r.person_name);
     if (!key) continue;
     if (!m.has(key)) {
       m.set(key, { key, displayName: r.person_name.trim(), USD: emptyBucket(), TRY: emptyBucket() });
     }
     const p = m.get(key)!;
+    p.displayName = pickDisplay(p.displayName, r.person_name);
     const cur = r.currency === "TRY" ? "TRY" : "USD";
     p[cur].reductions.push(r);
   }
@@ -561,10 +573,32 @@ export default function BorcPage() {
               <CardContent className="py-8 text-center text-sm text-muted-foreground">Henüz kayıt yok.</CardContent>
             </Card>
           ) : (
-            people.map((person) => (
+            people.map((person) => {
+              const usdB = bucketSums(person.USD);
+              const tryB = bucketSums(person.TRY);
+              const hasUsd = person.USD.debts.length > 0 || person.USD.reductions.length > 0;
+              const hasTry = person.TRY.debts.length > 0 || person.TRY.reductions.length > 0;
+              return (
               <Card key={person.key}>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base uppercase">{person.displayName}</CardTitle>
+                  {(hasUsd || hasTry) && (
+                    <p className="text-xs text-muted-foreground">
+                      {hasUsd && (
+                        <span>
+                          USD kalan:{" "}
+                          <span className="font-semibold text-foreground">{formatUsd(usdB.balance)}</span>
+                        </span>
+                      )}
+                      {hasUsd && hasTry && <span className="mx-2">·</span>}
+                      {hasTry && (
+                        <span>
+                          TRY kalan:{" "}
+                          <span className="font-semibold text-foreground">{formatNumberTr(tryB.balance)} ₺</span>
+                        </span>
+                      )}
+                    </p>
+                  )}
                 </CardHeader>
                 <CardContent className="space-y-6">
                   {(["USD", "TRY"] as const).map((cur) => {
@@ -698,7 +732,8 @@ export default function BorcPage() {
                   })}
                 </CardContent>
               </Card>
-            ))
+            );
+            })
           )}
         </div>
       </div>

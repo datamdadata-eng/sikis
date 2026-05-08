@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { canonicalPersonKey } from "@/lib/person-name-key";
 
 type DebtRow = {
   id: number;
@@ -89,7 +90,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_amount" }, { status: 400 });
   }
 
-  const storedName = personName.toUpperCase();
+  const storedName = canonicalPersonKey(personName);
 
   try {
     const { rows } = await query<{
