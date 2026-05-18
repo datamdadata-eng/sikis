@@ -39,7 +39,7 @@ export default function GiderlerPage() {
   const [currentUserName, setCurrentUserName] = useState<string | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<string[]>([...EXPENSE_CATEGORIES]);
-  const [activeCategory, setActiveCategory] = useState(EXPENSE_CATEGORIES[0]);
+  const [activeCategory, setActiveCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);

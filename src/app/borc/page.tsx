@@ -123,7 +123,7 @@ export default function BorcPage() {
   const [debts, setDebts] = useState<Debt[]>([]);
   const [reductions, setReductions] = useState<Reduction[]>([]);
   const [categories, setCategories] = useState<string[]>([...DEBT_CATEGORIES]);
-  const [activeCategory, setActiveCategory] = useState(DEBT_CATEGORIES[0]);
+  const [activeCategory, setActiveCategory] = useState<string>(DEBT_CATEGORIES[0]);
   const [personName, setPersonName] = useState("");
   const [amountUsd, setAmountUsd] = useState("");
   const [desc, setDesc] = useState("");
