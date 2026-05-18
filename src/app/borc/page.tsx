@@ -66,7 +66,7 @@ const DEFAULT_CATEGORIES = [
   "Guest Houselar",
   "Avans",
   "Worldcall",
-  "Diğer Hizmet Giderler",
+  "Diğer IT Giderleri",
 ];
 const DEFAULT_CATEGORY = "Avans";
 

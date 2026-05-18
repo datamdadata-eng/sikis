@@ -96,7 +96,7 @@ export async function POST() {
         "Guest Houselar",
         "Avans",
         "Worldcall",
-        "Diğer Hizmet Giderler",
+        "Diğer IT Giderleri",
       ]],
     );
 
