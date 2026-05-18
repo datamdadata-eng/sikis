@@ -1,0 +1,32 @@
+import { NextResponse } from "next/server";
+import { query } from "@/lib/db";
+
+export async function POST(request: Request) {
+  const body = await request.json().catch(() => ({}));
+  const name = String(body.name ?? "").trim();
+
+  if (!name) {
+    return NextResponse.json({ error: "name_required" }, { status: 400 });
+  }
+
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS debt_categories (
+        id SERIAL PRIMARY KEY,
+        name TEXT UNIQUE NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+    `);
+    const { rows } = await query<{ name: string }>(
+      `INSERT INTO debt_categories (name)
+       VALUES ($1)
+       ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+       RETURNING name`,
+      [name]
+    );
+    return NextResponse.json(rows[0]);
+  } catch (e) {
+    console.error("[debt_categories POST]", e);
+    return NextResponse.json({ error: "insert_failed" }, { status: 500 });
+  }
+}

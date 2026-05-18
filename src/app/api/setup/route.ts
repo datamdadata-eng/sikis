@@ -69,6 +69,36 @@ export async function POST() {
     await query(
       `ALTER TABLE debts ADD CONSTRAINT debts_currency_check CHECK (currency IN ('TRY', 'USD'));`
     );
+    await query(`ALTER TABLE debts ADD COLUMN IF NOT EXISTS category TEXT;`);
+    await query(`UPDATE debts SET category = 'Avans' WHERE category IS NULL OR TRIM(category) = '';`);
+    await query(`ALTER TABLE debts ALTER COLUMN category SET DEFAULT 'Avans';`);
+    await query(`ALTER TABLE debts ALTER COLUMN category SET NOT NULL;`);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS debt_categories (
+        id SERIAL PRIMARY KEY,
+        name TEXT UNIQUE NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+    `);
+
+    await query(
+      `
+      INSERT INTO debt_categories (name)
+      SELECT unnest($1::text[])
+      ON CONFLICT (name) DO NOTHING;
+    `,
+      [[
+        "Uçak Biletleri",
+        "Vize + Kitas",
+        "Yemek",
+        "Temizlikçi",
+        "Guest Houselar",
+        "Avans",
+        "Worldcall",
+        "Diğer Hizmet Giderler",
+      ]],
+    );
 
     await query(`
       CREATE TABLE IF NOT EXISTS admins (
@@ -137,6 +167,10 @@ export async function POST() {
         created_at TIMESTAMPTZ DEFAULT now()
       );
     `);
+    await query(`ALTER TABLE debt_reductions ADD COLUMN IF NOT EXISTS category TEXT;`);
+    await query(`UPDATE debt_reductions SET category = 'Avans' WHERE category IS NULL OR TRIM(category) = '';`);
+    await query(`ALTER TABLE debt_reductions ALTER COLUMN category SET DEFAULT 'Avans';`);
+    await query(`ALTER TABLE debt_reductions ALTER COLUMN category SET NOT NULL;`);
 
     return NextResponse.json({ ok: true });
   } catch (e) {

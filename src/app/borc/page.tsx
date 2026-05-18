@@ -29,6 +29,7 @@ type Debt = {
   amount: string;
   description: string | null;
   currency?: "USD" | "TRY";
+  category?: string;
   created_at?: string;
 };
 
@@ -37,6 +38,7 @@ type Reduction = {
   person_name: string;
   amount: string;
   currency: "USD" | "TRY";
+  category?: string;
   description: string | null;
   created_at?: string;
 };
@@ -56,7 +58,20 @@ const formatNumberTr = (value: number) =>
 const formatUsd = (value: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
 
+const DEFAULT_CATEGORIES = [
+  "Uçak Biletleri",
+  "Vize + Kitas",
+  "Yemek",
+  "Temizlikçi",
+  "Guest Houselar",
+  "Avans",
+  "Worldcall",
+  "Diğer Hizmet Giderler",
+];
+const DEFAULT_CATEGORY = "Avans";
+
 const debtCurrency = (d: Debt): "USD" | "TRY" => (d.currency === "TRY" ? "TRY" : "USD");
+const debtCategory = (item: Debt | Reduction): string => item.category?.trim() || DEFAULT_CATEGORY;
 
 const parseAmountInput = (value: string): number => {
   const n = Number(String(value).trim().replace(",", "."));
@@ -118,6 +133,9 @@ export default function BorcPage() {
   const [currentUserName, setCurrentUserName] = useState<string | null>(null);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [reductions, setReductions] = useState<Reduction[]>([]);
+  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
+  const [activeCategory, setActiveCategory] = useState(DEFAULT_CATEGORIES[0]);
+  const [newCategory, setNewCategory] = useState("");
   const [personName, setPersonName] = useState("");
   const [amountUsd, setAmountUsd] = useState("");
   const [desc, setDesc] = useState("");
@@ -163,13 +181,19 @@ export default function BorcPage() {
       if (Array.isArray(data)) {
         setDebts(data);
         setReductions([]);
+        setCategories(DEFAULT_CATEGORIES);
       } else {
         setDebts(Array.isArray(data.debts) ? data.debts : []);
         setReductions(Array.isArray(data.reductions) ? data.reductions : []);
+        const loadedCategories = Array.isArray(data.categories)
+          ? data.categories.map((c: unknown) => String(c).trim()).filter(Boolean)
+          : [];
+        setCategories(Array.from(new Set([...DEFAULT_CATEGORIES, ...loadedCategories])));
       }
     } catch {
       setDebts([]);
       setReductions([]);
+      setCategories(DEFAULT_CATEGORIES);
     }
   }, []);
 
@@ -181,13 +205,29 @@ export default function BorcPage() {
     if (loggedIn) loadDebts();
   }, [loggedIn, loadDebts]);
 
-  const people = useMemo(() => buildPeople(debts, reductions), [debts, reductions]);
+  useEffect(() => {
+    if (categories.length > 0 && !categories.includes(activeCategory)) {
+      setActiveCategory(categories[0]);
+    }
+  }, [activeCategory, categories]);
+
+  const activeDebts = useMemo(
+    () => debts.filter((d) => debtCategory(d) === activeCategory),
+    [activeCategory, debts]
+  );
+
+  const activeReductions = useMemo(
+    () => reductions.filter((r) => debtCategory(r) === activeCategory),
+    [activeCategory, reductions]
+  );
+
+  const people = useMemo(() => buildPeople(activeDebts, activeReductions), [activeDebts, activeReductions]);
 
   const { grossUsd, paidUsd, netUsd, grossTry, paidTry, netTry } = useMemo(() => {
-    const gUsd = debts.filter((d) => debtCurrency(d) === "USD").reduce((s, d) => s + Number(d.amount ?? 0), 0);
-    const pUsd = reductions.filter((r) => r.currency !== "TRY").reduce((s, r) => s + Number(r.amount ?? 0), 0);
-    const gTry = debts.filter((d) => debtCurrency(d) === "TRY").reduce((s, d) => s + Number(d.amount ?? 0), 0);
-    const pTry = reductions.filter((r) => r.currency === "TRY").reduce((s, r) => s + Number(r.amount ?? 0), 0);
+    const gUsd = activeDebts.filter((d) => debtCurrency(d) === "USD").reduce((s, d) => s + Number(d.amount ?? 0), 0);
+    const pUsd = activeReductions.filter((r) => r.currency !== "TRY").reduce((s, r) => s + Number(r.amount ?? 0), 0);
+    const gTry = activeDebts.filter((d) => debtCurrency(d) === "TRY").reduce((s, d) => s + Number(d.amount ?? 0), 0);
+    const pTry = activeReductions.filter((r) => r.currency === "TRY").reduce((s, r) => s + Number(r.amount ?? 0), 0);
     return {
       grossUsd: gUsd,
       paidUsd: pUsd,
@@ -196,7 +236,7 @@ export default function BorcPage() {
       paidTry: pTry,
       netTry: gTry - pTry,
     };
-  }, [debts, reductions]);
+  }, [activeDebts, activeReductions]);
 
   const reduceOptions = useMemo(() => {
     const opts: { value: string; label: string }[] = [];
@@ -255,6 +295,7 @@ export default function BorcPage() {
           personName: personNameForApi,
           amount,
           currency,
+          category: activeCategory,
           description,
         }),
       });
@@ -312,6 +353,7 @@ export default function BorcPage() {
           personName: name,
           amount,
           currency: "USD",
+          category: activeCategory,
           description: desc.trim() || null,
         }),
       });
@@ -332,6 +374,31 @@ export default function BorcPage() {
       setError("Borç eklenemedi.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAddCategory = async () => {
+    const category = newCategory.trim();
+    if (!category) {
+      setError("Kategori adı girin.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/debts/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: category }),
+      });
+      if (!res.ok) {
+        setError("Kategori eklenemedi.");
+        return;
+      }
+      setCategories((prev) => Array.from(new Set([...prev, category])));
+      setActiveCategory(category);
+      setNewCategory("");
+      setError(null);
+    } catch {
+      setError("Kategori eklenemedi.");
     }
   };
 
@@ -432,8 +499,57 @@ export default function BorcPage() {
       <div className="mx-auto max-w-4xl px-4 py-8">
         <h1 className="mb-6 text-2xl font-bold tracking-tight">Borçlar</h1>
 
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-base">Borç kategorileri</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Kategoriler tab olarak ayrılır; borç ve düşüm işlemleri seçili kategoriye kaydedilir.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              {categories.map((category) => {
+                const isActive = category === activeCategory;
+                const debtCount = debts.filter((d) => debtCategory(d) === category).length;
+                return (
+                  <Button
+                    key={category}
+                    type="button"
+                    variant={isActive ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => setActiveCategory(category)}
+                    className="gap-2"
+                  >
+                    {category}
+                    {debtCount > 0 && (
+                      <span className="rounded-full bg-background px-2 py-0.5 text-xs text-muted-foreground">
+                        {debtCount}
+                      </span>
+                    )}
+                  </Button>
+                );
+              })}
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                placeholder="Yeni kategori adı"
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleAddCategory();
+                }}
+              />
+              <Button type="button" variant="outline" onClick={() => void handleAddCategory()} className="gap-2">
+                <Plus className="size-4" />
+                Kategori ekle
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="mb-6 border-primary/30">
           <CardContent className="pt-6">
+            <p className="text-xs font-medium uppercase text-muted-foreground">{activeCategory}</p>
             <p className="text-sm text-muted-foreground">Kalan borç (USD)</p>
             <p className={`text-3xl font-bold ${netUsd < -0.01 ? "text-amber-600" : "text-primary"}`}>
               {formatUsd(netUsd)}
@@ -453,7 +569,7 @@ export default function BorcPage() {
               </div>
             ) : null}
             <p className="mt-2 text-xs text-muted-foreground">
-              {debts.length} borç satırı · {reductions.length} düşüm
+              {activeDebts.length} borç satırı · {activeReductions.length} düşüm
             </p>
           </CardContent>
         </Card>
@@ -462,7 +578,7 @@ export default function BorcPage() {
           <CardHeader>
             <CardTitle className="text-base">Borç düş (kişi seç)</CardTitle>
             <p className="text-xs text-muted-foreground">
-              Kalan borcu olan kişiler listelenir; tutar kalanı aşamaz.
+              Sadece {activeCategory} kategorisinde kalan borcu olan kişiler listelenir; tutar kalanı aşamaz.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -524,6 +640,9 @@ export default function BorcPage() {
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-base">Yeni borç ekle</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Bu borç <span className="font-medium text-foreground">{activeCategory}</span> kategorisine kaydedilecek.
+            </p>
           </CardHeader>
           <CardContent className="space-y-4">
             {error && <p className="text-sm text-destructive">{error}</p>}
@@ -566,7 +685,7 @@ export default function BorcPage() {
           </CardContent>
         </Card>
 
-        <h2 className="mb-3 text-lg font-semibold tracking-tight">Kişi bazında özet</h2>
+        <h2 className="mb-3 text-lg font-semibold tracking-tight">{activeCategory} kişi bazında özet</h2>
         <div className="space-y-4">
           {people.length === 0 ? (
             <Card>
