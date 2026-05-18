@@ -1,13 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { canonicalPersonKey } from "@/lib/person-name-key";
-
-const DEFAULT_CATEGORY = "Avans";
-
-const normalizeCategory = (value: unknown) => {
-  const category = String(value ?? "").trim();
-  return category || DEFAULT_CATEGORY;
-};
+import { normalizeDebtCategory } from "@/lib/finance-categories";
 
 /** DB’deki MIRAN / MİRAN farkını tek anahtarda birleştir (PostgreSQL UPPER + İ→I) */
 async function balanceFor(personKey: string, currency: "USD" | "TRY", category: string): Promise<number> {
@@ -35,7 +29,7 @@ export async function POST(request: Request) {
   const currencyRaw = String(body.currency ?? "USD").toUpperCase();
   const currency: "USD" | "TRY" = currencyRaw === "TRY" ? "TRY" : "USD";
   const description = body.description != null ? String(body.description).trim() || null : null;
-  const category = normalizeCategory(body.category);
+  const category = normalizeDebtCategory(body.category);
 
   if (!personName) {
     return NextResponse.json({ error: "person_required" }, { status: 400 });

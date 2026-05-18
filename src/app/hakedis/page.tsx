@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Package, LogOut, Calendar, Banknote, ChevronLeft, ChevronRight, CircleDollarSign } from "lucide-react";
+import { Package, LogOut, Calendar, Banknote, ChevronLeft, ChevronRight, CircleDollarSign, ReceiptText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -210,6 +210,12 @@ export default function HakedisPage() {
               <Link href="/borc" className="gap-2">
                 <Banknote className="size-4" />
                 Borçlar
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/giderler" className="gap-2">
+                <ReceiptText className="size-4" />
+                Giderler
               </Link>
             </Button>
             <Button variant="secondary" size="sm" className="gap-2" asChild>

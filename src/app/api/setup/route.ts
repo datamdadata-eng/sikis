@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { DEBT_CATEGORIES, EXPENSE_CATEGORIES } from "@/lib/finance-categories";
 
 export async function POST() {
   try {
@@ -71,6 +72,7 @@ export async function POST() {
     );
     await query(`ALTER TABLE debts ADD COLUMN IF NOT EXISTS category TEXT;`);
     await query(`UPDATE debts SET category = 'Avans' WHERE category IS NULL OR TRIM(category) = '';`);
+    await query(`UPDATE debts SET category = 'Avans' WHERE NOT (category = ANY($1::text[]));`, [DEBT_CATEGORIES]);
     await query(`ALTER TABLE debts ALTER COLUMN category SET DEFAULT 'Avans';`);
     await query(`ALTER TABLE debts ALTER COLUMN category SET NOT NULL;`);
 
@@ -88,16 +90,38 @@ export async function POST() {
       SELECT unnest($1::text[])
       ON CONFLICT (name) DO NOTHING;
     `,
-      [[
-        "Uçak Biletleri",
-        "Vize + Kitas",
-        "Yemek",
-        "Temizlikçi",
-        "Guest Houselar",
-        "Avans",
-        "Worldcall",
-        "Diğer IT Giderleri",
-      ]],
+      [DEBT_CATEGORIES],
+    );
+    await query(
+      `DELETE FROM debt_categories WHERE NOT (name = ANY($1::text[]));`,
+      [DEBT_CATEGORIES],
+    );
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS expenses (
+        id SERIAL PRIMARY KEY,
+        category TEXT NOT NULL,
+        amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+        note TEXT,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS expense_categories (
+        id SERIAL PRIMARY KEY,
+        name TEXT UNIQUE NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+    `);
+
+    await query(
+      `
+      INSERT INTO expense_categories (name)
+      SELECT unnest($1::text[])
+      ON CONFLICT (name) DO NOTHING;
+    `,
+      [EXPENSE_CATEGORIES],
     );
 
     await query(`
@@ -169,6 +193,7 @@ export async function POST() {
     `);
     await query(`ALTER TABLE debt_reductions ADD COLUMN IF NOT EXISTS category TEXT;`);
     await query(`UPDATE debt_reductions SET category = 'Avans' WHERE category IS NULL OR TRIM(category) = '';`);
+    await query(`UPDATE debt_reductions SET category = 'Avans' WHERE NOT (category = ANY($1::text[]));`, [DEBT_CATEGORIES]);
     await query(`ALTER TABLE debt_reductions ALTER COLUMN category SET DEFAULT 'Avans';`);
     await query(`ALTER TABLE debt_reductions ALTER COLUMN category SET NOT NULL;`);
 

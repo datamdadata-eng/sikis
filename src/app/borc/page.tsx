@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Package, LogOut, Calendar, Banknote, Plus, Trash2, CircleDollarSign, MinusCircle } from "lucide-react";
+import { Package, LogOut, Calendar, Banknote, Plus, Trash2, CircleDollarSign, MinusCircle, ReceiptText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DEBT_CATEGORIES, DEFAULT_DEBT_CATEGORY } from "@/lib/finance-categories";
 import {
   Select,
   SelectContent,
@@ -58,20 +59,8 @@ const formatNumberTr = (value: number) =>
 const formatUsd = (value: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
 
-const DEFAULT_CATEGORIES = [
-  "Uçak Biletleri",
-  "Vize + Kitas",
-  "Yemek",
-  "Temizlikçi",
-  "Guest Houselar",
-  "Avans",
-  "Worldcall",
-  "Diğer IT Giderleri",
-];
-const DEFAULT_CATEGORY = "Avans";
-
 const debtCurrency = (d: Debt): "USD" | "TRY" => (d.currency === "TRY" ? "TRY" : "USD");
-const debtCategory = (item: Debt | Reduction): string => item.category?.trim() || DEFAULT_CATEGORY;
+const debtCategory = (item: Debt | Reduction): string => item.category?.trim() || DEFAULT_DEBT_CATEGORY;
 
 const parseAmountInput = (value: string): number => {
   const n = Number(String(value).trim().replace(",", "."));
@@ -133,9 +122,8 @@ export default function BorcPage() {
   const [currentUserName, setCurrentUserName] = useState<string | null>(null);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [reductions, setReductions] = useState<Reduction[]>([]);
-  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
-  const [activeCategory, setActiveCategory] = useState(DEFAULT_CATEGORIES[0]);
-  const [newCategory, setNewCategory] = useState("");
+  const [categories, setCategories] = useState<string[]>([...DEBT_CATEGORIES]);
+  const [activeCategory, setActiveCategory] = useState(DEBT_CATEGORIES[0]);
   const [personName, setPersonName] = useState("");
   const [amountUsd, setAmountUsd] = useState("");
   const [desc, setDesc] = useState("");
@@ -181,19 +169,19 @@ export default function BorcPage() {
       if (Array.isArray(data)) {
         setDebts(data);
         setReductions([]);
-        setCategories(DEFAULT_CATEGORIES);
+        setCategories([...DEBT_CATEGORIES]);
       } else {
         setDebts(Array.isArray(data.debts) ? data.debts : []);
         setReductions(Array.isArray(data.reductions) ? data.reductions : []);
         const loadedCategories = Array.isArray(data.categories)
           ? data.categories.map((c: unknown) => String(c).trim()).filter(Boolean)
           : [];
-        setCategories(Array.from(new Set([...DEFAULT_CATEGORIES, ...loadedCategories])));
+        setCategories(Array.from(new Set([...DEBT_CATEGORIES, ...loadedCategories])));
       }
     } catch {
       setDebts([]);
       setReductions([]);
-      setCategories(DEFAULT_CATEGORIES);
+      setCategories([...DEBT_CATEGORIES]);
     }
   }, []);
 
@@ -377,31 +365,6 @@ export default function BorcPage() {
     }
   };
 
-  const handleAddCategory = async () => {
-    const category = newCategory.trim();
-    if (!category) {
-      setError("Kategori adı girin.");
-      return;
-    }
-    try {
-      const res = await fetch("/api/debts/categories", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: category }),
-      });
-      if (!res.ok) {
-        setError("Kategori eklenemedi.");
-        return;
-      }
-      setCategories((prev) => Array.from(new Set([...prev, category])));
-      setActiveCategory(category);
-      setNewCategory("");
-      setError(null);
-    } catch {
-      setError("Kategori eklenemedi.");
-    }
-  };
-
   const handleDelete = async (id: number) => {
     if (!confirm("Bu borcu silmek istediğinize emin misiniz?")) return;
     const res = await fetch(`/api/debts/${id}`, { method: "DELETE" });
@@ -471,6 +434,12 @@ export default function BorcPage() {
               </Link>
             </Button>
             <Button variant="ghost" size="sm" className="gap-2" asChild>
+              <Link href="/giderler">
+                <ReceiptText className="size-4" />
+                Giderler
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" className="gap-2" asChild>
               <Link href="/hakedis">
                 <CircleDollarSign className="size-4" />
                 Hakediş
@@ -503,7 +472,7 @@ export default function BorcPage() {
           <CardHeader>
             <CardTitle className="text-base">Borç kategorileri</CardTitle>
             <p className="text-xs text-muted-foreground">
-              Kategoriler tab olarak ayrılır; borç ve düşüm işlemleri seçili kategoriye kaydedilir.
+              Borçlar kişi bazlı takip edilir; gider kategorileri ayrı Giderler sayfasındadır.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -529,20 +498,6 @@ export default function BorcPage() {
                   </Button>
                 );
               })}
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Input
-                placeholder="Yeni kategori adı"
-                value={newCategory}
-                onChange={(e) => setNewCategory(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") void handleAddCategory();
-                }}
-              />
-              <Button type="button" variant="outline" onClick={() => void handleAddCategory()} className="gap-2">
-                <Plus className="size-4" />
-                Kategori ekle
-              </Button>
             </div>
           </CardContent>
         </Card>

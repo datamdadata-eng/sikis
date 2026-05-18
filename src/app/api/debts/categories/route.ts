@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { DEBT_CATEGORIES, normalizeDebtCategory } from "@/lib/finance-categories";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
-  const name = String(body.name ?? "").trim();
+  const name = normalizeDebtCategory(body.name);
 
-  if (!name) {
-    return NextResponse.json({ error: "name_required" }, { status: 400 });
+  if (!DEBT_CATEGORIES.includes(name as (typeof DEBT_CATEGORIES)[number])) {
+    return NextResponse.json({ error: "invalid_category" }, { status: 400 });
   }
 
   try {

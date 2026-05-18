@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { canonicalPersonKey } from "@/lib/person-name-key";
+import { DEBT_CATEGORIES, DEFAULT_DEBT_CATEGORY, normalizeDebtCategory } from "@/lib/finance-categories";
 
 type DebtRow = {
   id: number;
@@ -22,30 +23,13 @@ type ReductionRow = {
   created_at: string;
 };
 
-const DEFAULT_CATEGORIES = [
-  "Uçak Biletleri",
-  "Vize + Kitas",
-  "Yemek",
-  "Temizlikçi",
-  "Guest Houselar",
-  "Avans",
-  "Worldcall",
-  "Diğer IT Giderleri",
-];
-const DEFAULT_CATEGORY = "Avans";
-
-const normalizeCategory = (value: unknown) => {
-  const category = String(value ?? "").trim();
-  return category || DEFAULT_CATEGORY;
-};
-
 async function loadReductions(): Promise<ReductionRow[]> {
   try {
     const { rows } = await query<ReductionRow>(
       `SELECT id, person_name, amount::text AS amount, currency, category, description, created_at
        FROM debt_reductions ORDER BY id DESC`
     );
-    return rows;
+    return rows.map((r) => ({ ...r, category: normalizeDebtCategory(r.category) }));
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (/relation "debt_reductions" does not exist/i.test(msg)) {
@@ -64,7 +48,7 @@ async function loadReductions(): Promise<ReductionRow[]> {
           `SELECT id, person_name, amount::text AS amount, currency, description, created_at
            FROM debt_reductions ORDER BY id DESC`
         );
-        return rows.map((r) => ({ ...r, category: DEFAULT_CATEGORY }));
+        return rows.map((r) => ({ ...r, category: DEFAULT_DEBT_CATEGORY }));
       } catch (inner) {
         console.error("[debts GET reductions legacy]", inner);
         return [];
@@ -82,23 +66,24 @@ export async function GET() {
     const { rows } = await query<DebtRow>(
       `SELECT id, person_name, amount::text AS amount, description, currency, category, created_at FROM debts ORDER BY id DESC`
     );
+    const debts = rows.map((r) => ({ ...r, category: normalizeDebtCategory(r.category) }));
     const reductions = await loadReductions();
     const categoryRows = await query<{ name: string }>(
       `SELECT name FROM debt_categories ORDER BY id ASC`
-    ).catch(() => ({ rows: DEFAULT_CATEGORIES.map((name) => ({ name })) }));
+    ).catch(() => ({ rows: DEBT_CATEGORIES.map((name) => ({ name })) }));
     const categories = Array.from(
       new Set([
-        ...DEFAULT_CATEGORIES,
-        ...categoryRows.rows.map((r) => r.name),
-        ...rows.map((r) => r.category),
-        ...reductions.map((r) => r.category),
+        ...DEBT_CATEGORIES,
+        ...categoryRows.rows.map((r) => normalizeDebtCategory(r.name)),
+        ...debts.map((r) => r.category),
+        ...reductions.map((r) => normalizeDebtCategory(r.category)),
       ].filter(Boolean))
     );
-    return NextResponse.json({ debts: rows, reductions, categories });
+    return NextResponse.json({ debts, reductions, categories });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (/relation "debts" does not exist/i.test(msg)) {
-      return NextResponse.json({ ...empty, categories: DEFAULT_CATEGORIES });
+      return NextResponse.json({ ...empty, categories: DEBT_CATEGORIES });
     }
     if (/column "currency" does not exist/i.test(msg)) {
       try {
@@ -111,12 +96,12 @@ export async function GET() {
         }>(
           `SELECT id, person_name, amount::text AS amount, description, created_at FROM debts ORDER BY id DESC`
         );
-        const debts = rows.map((r) => ({ ...r, currency: "TRY" as const }));
+        const debts = rows.map((r) => ({ ...r, currency: "TRY" as const, category: DEFAULT_DEBT_CATEGORY }));
         const reductions = await loadReductions();
-        return NextResponse.json({ debts, reductions, categories: DEFAULT_CATEGORIES });
+        return NextResponse.json({ debts, reductions, categories: DEBT_CATEGORIES });
       } catch (inner) {
         console.error("[debts GET legacy]", inner);
-        return NextResponse.json({ ...empty, categories: DEFAULT_CATEGORIES });
+        return NextResponse.json({ ...empty, categories: DEBT_CATEGORIES });
       }
     }
     if (/column "category" does not exist/i.test(msg)) {
@@ -131,16 +116,16 @@ export async function GET() {
         }>(
           `SELECT id, person_name, amount::text AS amount, description, currency, created_at FROM debts ORDER BY id DESC`
         );
-        const debts = rows.map((r) => ({ ...r, category: DEFAULT_CATEGORY }));
+        const debts = rows.map((r) => ({ ...r, category: DEFAULT_DEBT_CATEGORY }));
         const reductions = await loadReductions();
-        return NextResponse.json({ debts, reductions, categories: DEFAULT_CATEGORIES });
+        return NextResponse.json({ debts, reductions, categories: DEBT_CATEGORIES });
       } catch (inner) {
         console.error("[debts GET legacy category]", inner);
-        return NextResponse.json({ ...empty, categories: DEFAULT_CATEGORIES });
+        return NextResponse.json({ ...empty, categories: DEBT_CATEGORIES });
       }
     }
     console.error("[debts GET]", e);
-    return NextResponse.json({ ...empty, categories: DEFAULT_CATEGORIES }, { status: 200 });
+    return NextResponse.json({ ...empty, categories: DEBT_CATEGORIES }, { status: 200 });
   }
 }
 
@@ -151,7 +136,7 @@ export async function POST(request: Request) {
   const amount = Number(body.amount);
   const currencyRaw = String(body.currency ?? "USD").toUpperCase();
   const currency = currencyRaw === "TRY" ? "TRY" : "USD";
-  const category = normalizeCategory(body.category);
+  const category = normalizeDebtCategory(body.category);
 
   if (!personName) {
     return NextResponse.json({ error: "person_required" }, { status: 400 });
