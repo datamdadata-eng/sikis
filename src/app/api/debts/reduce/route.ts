@@ -1,23 +1,22 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { canonicalPersonKey } from "@/lib/person-name-key";
-import { normalizeDebtCategory } from "@/lib/finance-categories";
+import { ensureDebtV2Tables } from "../route";
 
-/** DB’deki MIRAN / MİRAN farkını tek anahtarda birleştir (PostgreSQL UPPER + İ→I) */
-async function balanceFor(personKey: string, currency: "USD" | "TRY", category: string): Promise<number> {
+async function balanceFor(personKey: string, currency: "USD" | "TRY"): Promise<number> {
   const { rows } = await query<{ balance: string }>(
     `
     WITH d AS (
-      SELECT COALESCE(SUM(amount), 0) AS s FROM debts
-      WHERE REPLACE(UPPER(TRIM(person_name)), 'İ', 'I') = $1 AND currency = $2 AND category = $3
+      SELECT COALESCE(SUM(amount), 0) AS s FROM debts_v2
+      WHERE REPLACE(UPPER(TRIM(person_name)), 'İ', 'I') = $1 AND currency = $2
     ),
     r AS (
-      SELECT COALESCE(SUM(amount), 0) AS s FROM debt_reductions
-      WHERE REPLACE(UPPER(TRIM(person_name)), 'İ', 'I') = $1 AND currency = $2 AND category = $3
+      SELECT COALESCE(SUM(amount), 0) AS s FROM debt_reductions_v2
+      WHERE REPLACE(UPPER(TRIM(person_name)), 'İ', 'I') = $1 AND currency = $2
     )
     SELECT (d.s - r.s)::text AS balance FROM d, r
     `,
-    [personKey, currency, category]
+    [personKey, currency]
   );
   return Number(rows[0]?.balance ?? 0);
 }
@@ -29,7 +28,6 @@ export async function POST(request: Request) {
   const currencyRaw = String(body.currency ?? "USD").toUpperCase();
   const currency: "USD" | "TRY" = currencyRaw === "TRY" ? "TRY" : "USD";
   const description = body.description != null ? String(body.description).trim() || null : null;
-  const category = normalizeDebtCategory(body.category);
 
   if (!personName) {
     return NextResponse.json({ error: "person_required" }, { status: 400 });
@@ -43,17 +41,18 @@ export async function POST(request: Request) {
   }
 
   try {
-    const bal = await balanceFor(personKey, currency, category);
+    await ensureDebtV2Tables();
+    const bal = await balanceFor(personKey, currency);
     if (bal <= 0) {
       return NextResponse.json(
-        { error: "no_balance", message: "Bu kişi, kategori ve para birimi için düşülecek borç kalmadı." },
+        { error: "no_balance", message: "Bu kisi ve para birimi icin dusulecek borc kalmadi." },
         { status: 400 }
       );
     }
     const cents = (x: number) => Math.round(x * 100);
     if (cents(amount) > cents(bal)) {
       return NextResponse.json(
-        { error: "exceeds_balance", balance: bal, message: `Kalan borç: ${bal}` },
+        { error: "exceeds_balance", balance: bal, message: `Kalan borc: ${bal}` },
         { status: 400 }
       );
     }
@@ -63,34 +62,16 @@ export async function POST(request: Request) {
       person_name: string;
       amount: string;
       currency: string;
-      category: string;
       description: string | null;
       created_at: string;
     }>(
-      `INSERT INTO debt_reductions (person_name, amount, currency, category, description)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, person_name, amount::text AS amount, currency, category, description, created_at`,
-      [personKey, amount, currency, category, description]
+      `INSERT INTO debt_reductions_v2 (person_name, amount, currency, description)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, person_name, amount::text AS amount, currency, description, created_at`,
+      [personKey, amount, currency, description]
     );
-    await query(
-      `INSERT INTO debt_categories (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`,
-      [category]
-    ).catch(() => undefined);
     return NextResponse.json(rows[0]);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (/relation "debt_reductions" does not exist/i.test(msg)) {
-      return NextResponse.json(
-        { error: "setup_required", message: "Bir kez POST /api/setup çalıştırın (borç düşüm tablosu)." },
-        { status: 503 }
-      );
-    }
-    if (/column "category" does not exist/i.test(msg)) {
-      return NextResponse.json(
-        { error: "setup_required", message: "Bir kez POST /api/setup çalıştırın (borç kategori alanı)." },
-        { status: 503 }
-      );
-    }
     console.error("[debts/reduce POST]", e);
     return NextResponse.json({ error: "insert_failed" }, { status: 500 });
   }

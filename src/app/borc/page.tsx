@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DEBT_CATEGORIES, DEFAULT_DEBT_CATEGORY } from "@/lib/finance-categories";
 import {
   Select,
   SelectContent,
@@ -30,7 +29,6 @@ type Debt = {
   amount: string;
   description: string | null;
   currency?: "USD" | "TRY";
-  category?: string;
   created_at?: string;
 };
 
@@ -39,7 +37,6 @@ type Reduction = {
   person_name: string;
   amount: string;
   currency: "USD" | "TRY";
-  category?: string;
   description: string | null;
   created_at?: string;
 };
@@ -60,7 +57,19 @@ const formatUsd = (value: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
 
 const debtCurrency = (d: Debt): "USD" | "TRY" => (d.currency === "TRY" ? "TRY" : "USD");
-const debtCategory = (item: Debt | Reduction): string => item.category?.trim() || DEFAULT_DEBT_CATEGORY;
+
+const formatDebtDate = (value?: string) => {
+  if (!value) return "-";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleString("tr-TR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
 
 const parseAmountInput = (value: string): number => {
   const n = Number(String(value).trim().replace(",", "."));
@@ -122,8 +131,6 @@ export default function BorcPage() {
   const [currentUserName, setCurrentUserName] = useState<string | null>(null);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [reductions, setReductions] = useState<Reduction[]>([]);
-  const [categories, setCategories] = useState<string[]>([...DEBT_CATEGORIES]);
-  const [activeCategory, setActiveCategory] = useState<string>(DEBT_CATEGORIES[0]);
   const [personName, setPersonName] = useState("");
   const [amountUsd, setAmountUsd] = useState("");
   const [desc, setDesc] = useState("");
@@ -169,19 +176,13 @@ export default function BorcPage() {
       if (Array.isArray(data)) {
         setDebts(data);
         setReductions([]);
-        setCategories([...DEBT_CATEGORIES]);
       } else {
         setDebts(Array.isArray(data.debts) ? data.debts : []);
         setReductions(Array.isArray(data.reductions) ? data.reductions : []);
-        const loadedCategories = Array.isArray(data.categories)
-          ? data.categories.map((c: unknown) => String(c).trim()).filter(Boolean)
-          : [];
-        setCategories(Array.from(new Set([...DEBT_CATEGORIES, ...loadedCategories])));
       }
     } catch {
       setDebts([]);
       setReductions([]);
-      setCategories([...DEBT_CATEGORIES]);
     }
   }, []);
 
@@ -193,21 +194,8 @@ export default function BorcPage() {
     if (loggedIn) loadDebts();
   }, [loggedIn, loadDebts]);
 
-  useEffect(() => {
-    if (categories.length > 0 && !categories.includes(activeCategory)) {
-      setActiveCategory(categories[0]);
-    }
-  }, [activeCategory, categories]);
-
-  const activeDebts = useMemo(
-    () => debts.filter((d) => debtCategory(d) === activeCategory),
-    [activeCategory, debts]
-  );
-
-  const activeReductions = useMemo(
-    () => reductions.filter((r) => debtCategory(r) === activeCategory),
-    [activeCategory, reductions]
-  );
+  const activeDebts = debts;
+  const activeReductions = reductions;
 
   const people = useMemo(() => buildPeople(activeDebts, activeReductions), [activeDebts, activeReductions]);
 
@@ -283,7 +271,6 @@ export default function BorcPage() {
           personName: personNameForApi,
           amount,
           currency,
-          category: activeCategory,
           description,
         }),
       });
@@ -341,7 +328,6 @@ export default function BorcPage() {
           personName: name,
           amount,
           currency: "USD",
-          category: activeCategory,
           description: desc.trim() || null,
         }),
       });
@@ -468,43 +454,8 @@ export default function BorcPage() {
       <div className="mx-auto max-w-4xl px-4 py-8">
         <h1 className="mb-6 text-2xl font-bold tracking-tight">Borçlar</h1>
 
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-base">Borç kategorileri</CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Borçlar kişi bazlı takip edilir; gider kategorileri ayrı Giderler sayfasındadır.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              {categories.map((category) => {
-                const isActive = category === activeCategory;
-                const debtCount = debts.filter((d) => debtCategory(d) === category).length;
-                return (
-                  <Button
-                    key={category}
-                    type="button"
-                    variant={isActive ? "secondary" : "outline"}
-                    size="sm"
-                    onClick={() => setActiveCategory(category)}
-                    className="gap-2"
-                  >
-                    {category}
-                    {debtCount > 0 && (
-                      <span className="rounded-full bg-background px-2 py-0.5 text-xs text-muted-foreground">
-                        {debtCount}
-                      </span>
-                    )}
-                  </Button>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-
         <Card className="mb-6 border-primary/30">
           <CardContent className="pt-6">
-            <p className="text-xs font-medium uppercase text-muted-foreground">{activeCategory}</p>
             <p className="text-sm text-muted-foreground">Kalan borç (USD)</p>
             <p className={`text-3xl font-bold ${netUsd < -0.01 ? "text-amber-600" : "text-primary"}`}>
               {formatUsd(netUsd)}
@@ -533,7 +484,7 @@ export default function BorcPage() {
           <CardHeader>
             <CardTitle className="text-base">Borç düş (kişi seç)</CardTitle>
             <p className="text-xs text-muted-foreground">
-              Sadece {activeCategory} kategorisinde kalan borcu olan kişiler listelenir; tutar kalanı aşamaz.
+              Kalan borcu olan kişiler listelenir; tutar kalanı aşamaz.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -595,9 +546,6 @@ export default function BorcPage() {
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-base">Yeni borç ekle</CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Bu borç <span className="font-medium text-foreground">{activeCategory}</span> kategorisine kaydedilecek.
-            </p>
           </CardHeader>
           <CardContent className="space-y-4">
             {error && <p className="text-sm text-destructive">{error}</p>}
@@ -640,7 +588,7 @@ export default function BorcPage() {
           </CardContent>
         </Card>
 
-        <h2 className="mb-3 text-lg font-semibold tracking-tight">{activeCategory} kişi bazında özet</h2>
+        <h2 className="mb-3 text-lg font-semibold tracking-tight">Kişi bazında özet</h2>
         <div className="space-y-4">
           {people.length === 0 ? (
             <Card>
@@ -710,6 +658,7 @@ export default function BorcPage() {
                                 >
                                   <div className="min-w-0">
                                     <p className="font-semibold text-primary">{formatMoney(Number(d.amount), cur)}</p>
+                                    <p className="text-xs text-muted-foreground">Tarih: {formatDebtDate(d.created_at)}</p>
                                     {d.description && (
                                       <p className="text-xs text-muted-foreground">{d.description}</p>
                                     )}
@@ -741,6 +690,7 @@ export default function BorcPage() {
                                 >
                                   <div className="min-w-0">
                                     <p className="font-medium text-foreground">− {formatMoney(Number(r.amount), cur)}</p>
+                                    <p className="text-xs text-muted-foreground">Tarih: {formatDebtDate(r.created_at)}</p>
                                     {r.description && (
                                       <p className="text-xs text-muted-foreground">{r.description}</p>
                                     )}

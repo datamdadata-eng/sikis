@@ -197,6 +197,50 @@ export async function POST() {
     await query(`ALTER TABLE debt_reductions ALTER COLUMN category SET DEFAULT 'Avans';`);
     await query(`ALTER TABLE debt_reductions ALTER COLUMN category SET NOT NULL;`);
 
+    await query(`
+      CREATE TABLE IF NOT EXISTS debts_v2 (
+        id SERIAL PRIMARY KEY,
+        person_name TEXT NOT NULL,
+        amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+        description TEXT,
+        currency TEXT NOT NULL DEFAULT 'USD' CHECK (currency IN ('TRY', 'USD')),
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS debt_reductions_v2 (
+        id SERIAL PRIMARY KEY,
+        person_name TEXT NOT NULL,
+        amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+        currency TEXT NOT NULL CHECK (currency IN ('TRY', 'USD')),
+        description TEXT,
+        created_at TIMESTAMPTZ DEFAULT now()
+      );
+    `);
+
+    const { rows: debtV2Count } = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM debts_v2`
+    );
+    if (Number(debtV2Count[0]?.count ?? 0) === 0) {
+      await query(`
+        INSERT INTO debts_v2 (person_name, amount, description, currency, created_at)
+        SELECT person_name, amount, description, currency, created_at
+        FROM debts
+      `);
+    }
+
+    const { rows: reductionV2Count } = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM debt_reductions_v2`
+    );
+    if (Number(reductionV2Count[0]?.count ?? 0) === 0) {
+      await query(`
+        INSERT INTO debt_reductions_v2 (person_name, amount, currency, description, created_at)
+        SELECT person_name, amount, currency, description, created_at
+        FROM debt_reductions
+      `);
+    }
+
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error(e);
