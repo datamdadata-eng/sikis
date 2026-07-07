@@ -9,6 +9,7 @@ type Period = "week" | "month";
 type PerformanceRow = {
   user_id: number | null;
   user_name: string;
+  rate_percent: string;
   user_count: string;
   user_onay_count: string;
   user_patladi_count: string;
@@ -82,6 +83,7 @@ export async function GET(request: Request) {
         COALESCE('user:' || u.id::text, 'missing-user') AS person_key,
         u.id AS user_id,
         COALESCE(u.name, 'Tanımsız') AS user_name,
+        COALESCE(u.default_hakedis_percent, 0) AS rate_percent,
         COUNT(s.id) AS user_count,
         COUNT(s.id) FILTER (WHERE s.status = 'onay') AS user_onay_count,
         COUNT(s.id) FILTER (WHERE s.status = 'patladi') AS user_patladi_count,
@@ -90,13 +92,14 @@ export async function GET(request: Request) {
         COALESCE(SUM(s.amount) FILTER (WHERE s.status = 'patladi'), 0) AS user_patladi
       FROM filtered s
       LEFT JOIN users u ON s.user_id = u.id
-      GROUP BY u.id, u.name
+      GROUP BY u.id, u.name, u.default_hakedis_percent
     ),
     closer_role AS (
       SELECT
         COALESCE('user:' || u.id::text, 'no-closer') AS person_key,
         u.id AS user_id,
         COALESCE(u.name, 'Kapatıcı yok') AS user_name,
+        COALESCE(u.default_hakedis_percent, 0) AS rate_percent,
         COUNT(s.id) AS closer_count,
         COUNT(s.id) FILTER (WHERE s.status = 'onay') AS closer_onay_count,
         COUNT(s.id) FILTER (WHERE s.status = 'patladi') AS closer_patladi_count,
@@ -105,7 +108,7 @@ export async function GET(request: Request) {
         COALESCE(SUM(s.amount) FILTER (WHERE s.status = 'patladi'), 0) AS closer_patladi
       FROM filtered s
       LEFT JOIN users u ON s.closer_user_id = u.id
-      GROUP BY u.id, u.name
+      GROUP BY u.id, u.name, u.default_hakedis_percent
     ),
     people AS (
       SELECT person_key, user_id, user_name FROM users_role
@@ -115,6 +118,7 @@ export async function GET(request: Request) {
     SELECT
       p.user_id,
       p.user_name,
+      COALESCE(ur.rate_percent, cr.rate_percent, 0)::text AS rate_percent,
       COALESCE(ur.user_count, 0)::text AS user_count,
       COALESCE(ur.user_onay_count, 0)::text AS user_onay_count,
       COALESCE(ur.user_patladi_count, 0)::text AS user_patladi_count,

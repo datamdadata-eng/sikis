@@ -27,6 +27,7 @@ type Period = "week" | "month";
 type PerformanceRow = {
   user_id: number | null;
   user_name: string;
+  rate_percent: string;
   user_count: string;
   user_onay_count: string;
   user_patladi_count: string;
@@ -135,8 +136,14 @@ export default function PerformansPage() {
   const totals = useMemo(() => {
     const userTotal = data?.rows.reduce((s, r) => s + Number(r.user_total ?? 0), 0) ?? 0;
     const closerTotal = data?.rows.reduce((s, r) => s + Number(r.closer_total ?? 0), 0) ?? 0;
+    const earnedTotal =
+      data?.rows.reduce((s, r) => {
+        const rate = Number(r.rate_percent ?? 0);
+        const ciro = Number(r.user_total ?? 0) + Number(r.closer_total ?? 0);
+        return s + (ciro * rate) / 100;
+      }, 0) ?? 0;
     const grand = Number(data?.totals.total_amount ?? 0);
-    return { userTotal, closerTotal, grand };
+    return { userTotal, closerTotal, earnedTotal, grand };
   }, [data]);
 
   if (!loggedIn) {
@@ -218,7 +225,7 @@ export default function PerformansPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Performans</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Kişilerin satış alan kullanıcı ve kapatıcı rollerindeki dönem toplamları.
+              Kişilerin kullanıcı ve kapatıcı rollerindeki ciro, işlem ve tahmini kazançları.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -259,10 +266,10 @@ export default function PerformansPage() {
           </div>
         </div>
 
-        <div className="mb-6 grid gap-4 md:grid-cols-3">
+        <div className="mb-6 grid gap-4 md:grid-cols-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Toplam satış</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Toplam ciro</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">{formatMoney(totals.grand)}</p>
@@ -274,7 +281,7 @@ export default function PerformansPage() {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Kullanıcı dilimi</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Kullanıcı cirosu</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">{formatMoney(totals.userTotal)}</p>
@@ -283,11 +290,20 @@ export default function PerformansPage() {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Kapatıcı dilimi</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Kapatıcı cirosu</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">{formatMoney(totals.closerTotal)}</p>
               <p className="mt-1 text-xs text-muted-foreground">Satışı kapatan kişi bazında</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Tahmini kazanç</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold">{formatMoney(totals.earnedTotal)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Ciro × hakediş yüzdesi</p>
             </CardContent>
           </Card>
         </div>
@@ -303,28 +319,37 @@ export default function PerformansPage() {
               <p className="py-8 text-center text-sm text-muted-foreground">Bu dönemde kayıt yok.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[920px] text-left text-sm">
+                <table className="w-full min-w-[1080px] text-left text-sm">
                   <thead className="border-b border-border text-xs uppercase text-muted-foreground">
                     <tr>
                       <th className="px-3 py-3 font-medium">Kişi</th>
-                      <th className="px-3 py-3 font-medium">Kullanıcı</th>
+                      <th className="px-3 py-3 font-medium">Hakediş</th>
+                      <th className="px-3 py-3 font-medium">Kullanıcı cirosu</th>
                       <th className="px-3 py-3 font-medium">Kullanıcı dilimi</th>
-                      <th className="px-3 py-3 font-medium">Kapatıcı</th>
+                      <th className="px-3 py-3 font-medium">Kapatıcı cirosu</th>
                       <th className="px-3 py-3 font-medium">Kapatıcı dilimi</th>
-                      <th className="px-3 py-3 font-medium">Toplam etki</th>
+                      <th className="px-3 py-3 font-medium">Toplam</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {data.rows.map((row) => {
                       const userTotal = Number(row.user_total ?? 0);
                       const closerTotal = Number(row.closer_total ?? 0);
+                      const rate = Number(row.rate_percent ?? 0);
+                      const userEarned = (userTotal * rate) / 100;
+                      const closerEarned = (closerTotal * rate) / 100;
                       const impact = userTotal + closerTotal;
+                      const earned = userEarned + closerEarned;
                       const userShare = totals.userTotal > 0 ? (userTotal / totals.userTotal) * 100 : 0;
                       const closerShare = totals.closerTotal > 0 ? (closerTotal / totals.closerTotal) * 100 : 0;
                       return (
                         <tr key={`${row.user_id ?? "none"}-${row.user_name}`} className="align-top">
                           <td className="px-3 py-3">
                             <p className="font-semibold uppercase text-foreground">{row.user_name}</p>
+                          </td>
+                          <td className="px-3 py-3">
+                            <p className="font-semibold">%{formatPercent(rate)}</p>
+                            <p className="text-xs text-muted-foreground">Kazanç oranı</p>
                           </td>
                           <td className="px-3 py-3">
                             <p className="font-semibold">{formatMoney(userTotal)}</p>
@@ -335,7 +360,7 @@ export default function PerformansPage() {
                           <td className="px-3 py-3">
                             <p className="font-semibold">%{formatPercent(userShare)}</p>
                             <p className="text-xs text-muted-foreground">
-                              Onay: {formatMoney(Number(row.user_onay ?? 0))}
+                              Kazanç: {formatMoney(userEarned)}
                             </p>
                           </td>
                           <td className="px-3 py-3">
@@ -347,13 +372,13 @@ export default function PerformansPage() {
                           <td className="px-3 py-3">
                             <p className="font-semibold">%{formatPercent(closerShare)}</p>
                             <p className="text-xs text-muted-foreground">
-                              Onay: {formatMoney(Number(row.closer_onay ?? 0))}
+                              Kazanç: {formatMoney(closerEarned)}
                             </p>
                           </td>
                           <td className="px-3 py-3">
                             <p className="font-semibold text-primary">{formatMoney(impact)}</p>
                             <p className="text-xs text-muted-foreground">
-                              Kullanıcı + kapatıcı toplamı
+                              Kazanç: {formatMoney(earned)}
                             </p>
                           </td>
                         </tr>
