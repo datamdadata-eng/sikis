@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Package, LogOut, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Banknote, CircleDollarSign, ReceiptText } from "lucide-react";
+import { Package, LogOut, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Banknote, CircleDollarSign, ReceiptText, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -234,6 +234,12 @@ export default function CiroPage() {
               <Link href="/hakedis">
                 <CircleDollarSign className="size-4" />
                 Hakediş
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" className="gap-2" asChild>
+              <Link href="/performans">
+                <BarChart3 className="size-4" />
+                Performans
               </Link>
             </Button>
           </div>
