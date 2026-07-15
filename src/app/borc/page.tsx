@@ -56,6 +56,9 @@ const formatNumberTr = (value: number) =>
 const formatUsd = (value: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
 
+const BORC_PAGE_PASSWORD = "19526300";
+const BORC_UNLOCK_KEY = "borc-page-unlocked";
+
 const debtCurrency = (d: Debt): "USD" | "TRY" => (d.currency === "TRY" ? "TRY" : "USD");
 
 const formatDebtDate = (value?: string) => {
@@ -136,6 +139,9 @@ export default function BorcPage() {
   const [desc, setDesc] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [passwordUnlocked, setPasswordUnlocked] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const [reduceSelect, setReduceSelect] = useState("");
   const [reduceAmountGlobal, setReduceAmountGlobal] = useState("");
@@ -191,8 +197,13 @@ export default function BorcPage() {
   }, [checkAuth]);
 
   useEffect(() => {
-    if (loggedIn) loadDebts();
-  }, [loggedIn, loadDebts]);
+    if (typeof window === "undefined") return;
+    setPasswordUnlocked(window.sessionStorage.getItem(BORC_UNLOCK_KEY) === "1");
+  }, []);
+
+  useEffect(() => {
+    if (loggedIn && passwordUnlocked) loadDebts();
+  }, [loggedIn, passwordUnlocked, loadDebts]);
 
   const activeDebts = debts;
   const activeReductions = reductions;
@@ -234,6 +245,19 @@ export default function BorcPage() {
     if (typeof window !== "undefined") window.localStorage.removeItem("satistakip-token");
     setLoggedIn(false);
     setCurrentUserName(null);
+  };
+
+  const handlePasswordSubmit = () => {
+    if (passwordInput.trim() !== BORC_PAGE_PASSWORD) {
+      setPasswordError("Şifre hatalı.");
+      return;
+    }
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(BORC_UNLOCK_KEY, "1");
+    }
+    setPasswordError(null);
+    setPasswordInput("");
+    setPasswordUnlocked(true);
   };
 
   const cardKey = (personKey: string, cur: "USD" | "TRY") => `${personKey}|${cur}`;
@@ -392,6 +416,44 @@ export default function BorcPage() {
             <Link href="/">Girişe git</Link>
           </Button>
         </div>
+      </div>
+    );
+  }
+
+  if (!passwordUnlocked) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-4 text-foreground">
+        <Card className="w-full max-w-sm">
+          <CardHeader>
+            <CardTitle className="text-base">Borçlar şifresi</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Şifre</Label>
+              <Input
+                type="password"
+                value={passwordInput}
+                onChange={(e) => {
+                  setPasswordInput(e.target.value);
+                  setPasswordError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handlePasswordSubmit();
+                }}
+                autoFocus
+              />
+            </div>
+            {passwordError && <p className="text-sm text-destructive">{passwordError}</p>}
+            <div className="flex items-center justify-between gap-2">
+              <Button variant="ghost" asChild>
+                <Link href="/">Geri dön</Link>
+              </Button>
+              <Button type="button" onClick={handlePasswordSubmit}>
+                Giriş
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
