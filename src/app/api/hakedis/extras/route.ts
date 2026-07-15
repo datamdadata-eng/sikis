@@ -38,6 +38,20 @@ type ExtrasRow = {
   closer_hakedis_pool_try: string;
 };
 
+async function ensureDailyExtrasTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS hakedis_day_extras (
+      day_date DATE NOT NULL PRIMARY KEY,
+      week_total_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
+      jin_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
+      arsimet_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
+      sales_hakedis_pool_try NUMERIC(14,2) NOT NULL DEFAULT 0,
+      closer_hakedis_pool_try NUMERIC(14,2) NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ DEFAULT now()
+    );
+  `);
+}
+
 export async function POST(request: Request) {
   const admin = verifyBearer(request);
   if (!admin) {
@@ -45,10 +59,10 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const weekStart = String(body.weekStart ?? "").trim();
+  const weekStart = String(body.dayDate ?? body.weekStart ?? "").trim();
 
   if (!DATE_RE.test(weekStart)) {
-    return NextResponse.json({ error: "invalid_week_start" }, { status: 400 });
+    return NextResponse.json({ error: "invalid_day_date" }, { status: 400 });
   }
 
   const hasWeekTotal = body.weekTotalPercent !== undefined && body.weekTotalPercent !== null;
@@ -68,10 +82,11 @@ export async function POST(request: Request) {
   let closerHakedisPoolTry = 0;
 
   try {
+    await ensureDailyExtrasTable();
     const cur = await query<ExtrasRow>(
       `SELECT week_total_percent::text, jin_percent::text, arsimet_percent::text,
               sales_hakedis_pool_try::text, closer_hakedis_pool_try::text
-       FROM hakedis_week_extras WHERE week_start = $1::date`,
+       FROM hakedis_day_extras WHERE day_date = $1::date`,
       [weekStart]
     );
     if (cur.rows[0]) {
@@ -83,7 +98,7 @@ export async function POST(request: Request) {
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    if (/hakedis_week_extras/i.test(msg) && /does not exist/i.test(msg)) {
+    if (/hakedis_day_extras/i.test(msg) && /does not exist/i.test(msg)) {
       return NextResponse.json({ error: "table_missing_run_setup" }, { status: 503 });
     }
     if (/sales_hakedis_pool_try/i.test(msg) || /closer_hakedis_pool_try/i.test(msg)) {
@@ -115,12 +130,12 @@ export async function POST(request: Request) {
   try {
     await query(
       `
-      INSERT INTO hakedis_week_extras (
-        week_start, week_total_percent, jin_percent, arsimet_percent,
+      INSERT INTO hakedis_day_extras (
+        day_date, week_total_percent, jin_percent, arsimet_percent,
         sales_hakedis_pool_try, closer_hakedis_pool_try
       )
       VALUES ($1::date, $2, $3, $4, $5, $6)
-      ON CONFLICT (week_start) DO UPDATE SET
+      ON CONFLICT (day_date) DO UPDATE SET
         week_total_percent = EXCLUDED.week_total_percent,
         jin_percent = EXCLUDED.jin_percent,
         arsimet_percent = EXCLUDED.arsimet_percent,
@@ -133,7 +148,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    if (/hakedis_week_extras/i.test(msg) && /does not exist/i.test(msg)) {
+    if (/hakedis_day_extras/i.test(msg) && /does not exist/i.test(msg)) {
       return NextResponse.json({ error: "table_missing_run_setup" }, { status: 503 });
     }
     if (/sales_hakedis_pool_try/i.test(msg) || /closer_hakedis_pool_try/i.test(msg)) {

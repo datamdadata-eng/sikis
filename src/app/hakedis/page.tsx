@@ -22,7 +22,7 @@ const formatUsd = (value: number) =>
 type PersonRow = {
   user_id: number;
   user_name: string;
-  /** Haftalık ciro: satış yapan + kapatıcı olarak geçen tutarlar toplamı */
+  /** Günlük ciro: satış yapan + kapatıcı olarak geçen tutarlar toplamı */
   total_amount: string;
   /** Kayıtlı hakediş % */
   rate_percent: number;
@@ -88,7 +88,7 @@ export default function HakedisPage() {
     const load = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/hakedis?weekOffset=${weekOffset}`, { cache: "no-store" });
+        const res = await fetch(`/api/hakedis?dayOffset=${weekOffset}`, { cache: "no-store" });
         if (res.ok) setData(await res.json());
         else setData(null);
       } finally {
@@ -132,12 +132,12 @@ export default function HakedisPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          weekStart: data.weekStart,
+          dayDate: data.weekStart,
           ...partial,
         }),
       });
       if (res.ok) {
-        const refresh = await fetch(`/api/hakedis?weekOffset=${weekOffset}`, { cache: "no-store" });
+        const refresh = await fetch(`/api/hakedis?dayOffset=${weekOffset}`, { cache: "no-store" });
         if (refresh.ok) setData(await refresh.json());
       }
     } finally {
@@ -147,7 +147,7 @@ export default function HakedisPage() {
 
   const weekLabel =
     data?.weekStart && data?.weekEnd
-      ? `${new Date(data.weekStart + "T12:00:00").toLocaleDateString("tr-TR", { day: "numeric", month: "long" })} – ${new Date(data.weekEnd + "T12:00:00").toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })}`
+      ? new Date(data.weekStart + "T12:00:00").toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })
       : "";
 
   const totalPeopleCiro =
@@ -168,7 +168,7 @@ export default function HakedisPage() {
         body: JSON.stringify({ defaultHakedisPercent: opts.percentage }),
       });
       if (res.ok) {
-        const refresh = await fetch(`/api/hakedis?weekOffset=${weekOffset}`, { cache: "no-store" });
+        const refresh = await fetch(`/api/hakedis?dayOffset=${weekOffset}`, { cache: "no-store" });
         if (refresh.ok) setData(await refresh.json());
       }
     } finally {
@@ -255,14 +255,14 @@ export default function HakedisPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Hakediş</h1>
             <p className="text-sm text-muted-foreground">
-              Haftalık (İstanbul Pazartesi–Pazar): Kişi başı <strong className="text-foreground">hakediş %</strong>{" "}
-              kullanıcıda sabit; tutar, hakediş matrahı × % ÷ 100 (aynı satışta hem açıp hem kapattıysanız matrah iki
-              rol için 2×, tabloda gösterilen haftalık ciro ise işlem tutarı 1×). JIN ve ARSIMET hafta satış toplamı
-              üzerinden %; haftalık toplam % yalnızca kayıt / nottur.
+              Günlük: Kişi başı <strong className="text-foreground">hakediş %</strong>{" "}
+              kullanıcıda sabit; tutar, hakediş matrahı x % / 100. Aynı satışta hem açıp hem kapattıysanız matrah iki
+              rol için 2x, tabloda gösterilen günlük ciro ise işlem tutarı 1x. JIN ve ARSIMET gün satış toplamı
+              üzerinden %; günlük toplam % yalnızca kayıt / nottur.
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={() => setWeekOffset((o) => o - 1)} aria-label="Önceki hafta">
+            <Button variant="outline" size="icon" onClick={() => setWeekOffset((o) => o - 1)} aria-label="Önceki gün">
               <ChevronLeft className="size-4" />
             </Button>
             <span className="min-w-[200px] text-center text-sm font-medium text-foreground">{weekLabel || "…"}</span>
@@ -271,13 +271,13 @@ export default function HakedisPage() {
               size="icon"
               onClick={() => setWeekOffset((o) => Math.min(0, o + 1))}
               disabled={weekOffset >= 0}
-              aria-label="Sonraki hafta"
+              aria-label="Sonraki gün"
             >
               <ChevronRight className="size-4" />
             </Button>
             {weekOffset !== 0 && (
               <Button variant="ghost" size="sm" onClick={() => setWeekOffset(0)}>
-                Bu hafta
+                Bugün
               </Button>
             )}
           </div>
@@ -307,15 +307,15 @@ export default function HakedisPage() {
               <div className="space-y-6">
                 <Card className="border-primary/25">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg">JIN · ARSIMET · hafta toplamı</CardTitle>
+                    <CardTitle className="text-lg">JIN · ARSIMET · gün toplamı</CardTitle>
                     <p className="text-xs text-muted-foreground">
-                      Bu haftanın <strong className="text-foreground">tüm satış</strong> toplamı (tüm satırlar) üzerinden
-                      JIN ve ARSIMET hakediş %. Haftalık toplam % alanı yalnızca kayıt / not (hakediş hesabına girmez).
+                      Bu günün <strong className="text-foreground">tüm satış</strong> toplamı (tüm satırlar) üzerinden
+                      JIN ve ARSIMET hakediş %. Günlük toplam % alanı yalnızca kayıt / not (hakediş hesabına girmez).
                     </p>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm">
-                      <p className="text-muted-foreground">Hafta satış toplamı (tüm satırlar)</p>
+                      <p className="text-muted-foreground">Gün satış toplamı (tüm satırlar)</p>
                       <p className="text-xl font-bold text-primary">{formatNumberTr(wtt)} ₺</p>
                       {usdWeek != null && (
                         <p className="text-xs text-muted-foreground">{formatUsd(usdWeek)}</p>
@@ -323,7 +323,7 @@ export default function HakedisPage() {
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-4">
                       <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Haftalık toplam % (kayıt)</Label>
+                        <Label className="text-xs text-muted-foreground">Günlük toplam % (kayıt)</Label>
                         <Input
                           type="number"
                           min={0}
@@ -347,7 +347,7 @@ export default function HakedisPage() {
                     </div>
                     <div className="hidden border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_5.5rem_minmax(0,1fr)] sm:items-center sm:gap-3">
                       <span>İsim</span>
-                      <span className="text-right">Haftalık ciro (toplam)</span>
+                      <span className="text-right">Günlük ciro (toplam)</span>
                       <span className="text-center">Hakediş %</span>
                       <span className="text-right">Hakediş tutarı</span>
                     </div>
@@ -406,7 +406,7 @@ export default function HakedisPage() {
                   <CardHeader className="pb-2">
                     <CardTitle className="text-lg">Kişi hakedişi</CardTitle>
                     <p className="text-xs text-muted-foreground">
-                      <strong className="text-foreground">Haftalık ciro</strong> aynı satışta hem açıp hem kapattıysanız tutarı
+                      <strong className="text-foreground">Günlük ciro</strong> aynı satışta hem açıp hem kapattıysanız tutarı
                       bir kez gösterir. <strong className="text-foreground">Hakediş tutarı</strong> bu satırlarda iki rol matrahı
                       (2×) üzerinden hesaplanır; % kullanıcıda sabittir.
                     </p>
@@ -414,14 +414,14 @@ export default function HakedisPage() {
                   <CardContent className="space-y-0 p-0">
                     <div className="hidden border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_5.5rem_minmax(0,1fr)] sm:items-center sm:gap-3 sm:px-6">
                       <span>İsim</span>
-                      <span className="text-right">Haftalık ciro (toplam)</span>
+                      <span className="text-right">Günlük ciro (toplam)</span>
                       <span className="text-center">Hakediş %</span>
                       <span className="text-right">Hakediş tutarı</span>
                     </div>
                     <div className="divide-y divide-border">
                       {data.people.length === 0 ? (
                         <p className="px-4 py-6 text-center text-sm text-muted-foreground sm:px-6">
-                          Bu hafta satış kaydı yok.
+                          Bu gün satış kaydı yok.
                         </p>
                       ) : (
                         data.people.map((r) => {
@@ -497,7 +497,7 @@ export default function HakedisPage() {
                     <div className="border-t border-primary/20 bg-primary/5 px-4 py-4 sm:px-6">
                       <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
                         <div>
-                          <p className="text-sm font-semibold text-foreground">Bu hafta hakediş toplamı</p>
+                          <p className="text-sm font-semibold text-foreground">Bu gün hakediş toplamı</p>
                           <p className="text-xs text-muted-foreground">Kişiler + JIN + ARSIMET (₺)</p>
                         </div>
                         <div className="text-left sm:text-right">

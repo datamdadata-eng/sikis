@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { ensureDebtV2Tables } from "../route";
+import { ensureDebtTables } from "../route";
 
 export async function DELETE(
   _request: Request,
@@ -12,12 +12,12 @@ export async function DELETE(
     return NextResponse.json({ error: "invalid_id" }, { status: 400 });
   }
   try {
-    await ensureDebtV2Tables();
-    await query("DELETE FROM debts_v2 WHERE id = $1", [idNum]);
+    await ensureDebtTables();
+    await query("DELETE FROM debts WHERE id = $1", [idNum]);
     return NextResponse.json({ ok: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    if (/relation "debts_v2" does not exist/i.test(msg)) {
+    if (/relation "debts" does not exist/i.test(msg)) {
       return NextResponse.json({ ok: true });
     }
     console.error("[debts DELETE]", e);

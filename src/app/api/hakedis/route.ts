@@ -6,30 +6,34 @@ import { fetchTryPerUsd } from "@/lib/frankfurter";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+async function ensureDailyExtrasTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS hakedis_day_extras (
+      day_date DATE NOT NULL PRIMARY KEY,
+      week_total_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
+      jin_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
+      arsimet_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
+      sales_hakedis_pool_try NUMERIC(14,2) NOT NULL DEFAULT 0,
+      closer_hakedis_pool_try NUMERIC(14,2) NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ DEFAULT now()
+    );
+  `);
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const weekOffset = Math.min(52, Math.max(-52, parseInt(searchParams.get("weekOffset") || "0", 10) || 0));
+  const dayOffset = Math.min(366, Math.max(-366, parseInt(searchParams.get("dayOffset") || searchParams.get("weekOffset") || "0", 10) || 0));
 
-  const { rows: boundRows } = await query<{ week_start: string; week_end: string }>(
+  const { rows: boundRows } = await query<{ day_date: string }>(
     `
-    WITH ref AS (
-      SELECT ((NOW() AT TIME ZONE 'Europe/Istanbul')::date + ($1 * 7))::date AS d
-    ),
-    bounds AS (
-      SELECT
-        (d - ((EXTRACT(ISODOW FROM d))::int - 1) * interval '1 day')::date AS week_start,
-        (d - ((EXTRACT(ISODOW FROM d))::int - 1) * interval '1 day' + interval '6 days')::date AS week_end
-      FROM ref
-    )
-    SELECT week_start::text, week_end::text FROM bounds
+    SELECT (((NOW() AT TIME ZONE 'Europe/Istanbul')::date + $1::int))::text AS day_date
     `,
-    [weekOffset]
+    [dayOffset]
   );
 
-  const weekStart = boundRows[0]?.week_start;
-  const weekEnd = boundRows[0]?.week_end;
-  if (!weekStart || !weekEnd) {
-    return NextResponse.json({ error: "week_bounds" }, { status: 500 });
+  const dayDate = boundRows[0]?.day_date;
+  if (!dayDate) {
+    return NextResponse.json({ error: "day_bounds" }, { status: 500 });
   }
 
   let personRows: {
@@ -85,8 +89,7 @@ export async function GET(request: Request) {
           ) AS amt_hakedis
         FROM sales s
         INNER JOIN users u ON u.id = s.user_id OR u.id = s.closer_user_id
-        WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date >= $1::date
-          AND (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date <= $2::date
+        WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date = $1::date
         GROUP BY u.id, u.name, u.default_hakedis_percent
       )
       SELECT c.user_id, c.user_name, c.amt_display::text AS total_amount,
@@ -96,7 +99,7 @@ export async function GET(request: Request) {
       WHERE c.amt_display > 0
       ORDER BY c.amt_display DESC NULLS LAST
       `,
-      [weekStart, weekEnd]
+      [dayDate]
     );
     personRows = pr.rows;
   } catch (e) {
@@ -145,8 +148,7 @@ export async function GET(request: Request) {
             ) AS amt_hakedis
           FROM sales s
           INNER JOIN users u ON u.id = s.user_id OR u.id = s.closer_user_id
-          WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date >= $1::date
-            AND (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date <= $2::date
+          WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date = $1::date
           GROUP BY u.id, u.name
         )
         SELECT c.user_id, c.user_name, c.amt_display::text AS total_amount,
@@ -155,7 +157,7 @@ export async function GET(request: Request) {
         WHERE c.amt_display > 0
         ORDER BY c.amt_display DESC NULLS LAST
         `,
-        [weekStart, weekEnd]
+        [dayDate]
       );
       personRows = pr.rows.map((r) => ({ ...r, default_hakedis_percent: "0" }));
     } else {
@@ -172,14 +174,13 @@ export async function GET(request: Request) {
       `
       SELECT COALESCE(SUM(s.amount), 0)::text AS t
       FROM sales s
-      WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date >= $1::date
-        AND (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date <= $2::date
+      WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date = $1::date
     `,
-      [weekStart, weekEnd]
+      [dayDate]
     );
     weekTotalTry = wt.rows[0]?.t ?? "0";
   } catch (e) {
-    console.error("[hakedis GET week total]", e);
+    console.error("[hakedis GET day total]", e);
   }
 
   let weekTotalPercent = 0;
@@ -187,6 +188,7 @@ export async function GET(request: Request) {
   let arsimetPercent = 0;
 
   try {
+    await ensureDailyExtrasTable();
     const ex = await query<{
       week_total_percent: string;
       jin_percent: string;
@@ -194,10 +196,10 @@ export async function GET(request: Request) {
     }>(
       `
       SELECT week_total_percent::text, jin_percent::text, arsimet_percent::text
-      FROM hakedis_week_extras
-      WHERE week_start = $1::date
+      FROM hakedis_day_extras
+      WHERE day_date = $1::date
     `,
-      [weekStart]
+      [dayDate]
     );
     if (ex.rows[0]) {
       weekTotalPercent = Number(ex.rows[0].week_total_percent);
@@ -206,7 +208,7 @@ export async function GET(request: Request) {
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    if (!/hakedis_week_extras/i.test(msg) || !/does not exist/i.test(msg)) {
+    if (!/hakedis_day_extras/i.test(msg) || !/does not exist/i.test(msg)) {
       console.error("[hakedis GET extras]", e);
     }
   }
@@ -229,9 +231,11 @@ export async function GET(request: Request) {
   });
 
   return NextResponse.json({
-    weekStart,
-    weekEnd,
-    weekOffset,
+    dayDate,
+    dayOffset,
+    weekStart: dayDate,
+    weekEnd: dayDate,
+    weekOffset: dayOffset,
     people,
     extras: {
       weekTotalTry,
