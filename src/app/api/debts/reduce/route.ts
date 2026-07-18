@@ -1,18 +1,17 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { canonicalPersonKey } from "@/lib/person-name-key";
-import { DEFAULT_DEBT_CATEGORY } from "@/lib/finance-categories";
-import { ensureDebtTables } from "../route";
+import { ensureDebtV2Tables } from "../route";
 
 async function balanceFor(personKey: string, currency: "USD" | "TRY"): Promise<number> {
   const { rows } = await query<{ balance: string }>(
     `
     WITH d AS (
-      SELECT COALESCE(SUM(amount), 0) AS s FROM debts
+      SELECT COALESCE(SUM(amount), 0) AS s FROM debts_v2
       WHERE REPLACE(UPPER(TRIM(person_name)), 'İ', 'I') = $1 AND currency = $2
     ),
     r AS (
-      SELECT COALESCE(SUM(amount), 0) AS s FROM debt_reductions
+      SELECT COALESCE(SUM(amount), 0) AS s FROM debt_reductions_v2
       WHERE REPLACE(UPPER(TRIM(person_name)), 'İ', 'I') = $1 AND currency = $2
     )
     SELECT (d.s - r.s)::text AS balance FROM d, r
@@ -42,7 +41,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    await ensureDebtTables();
+    await ensureDebtV2Tables();
     const bal = await balanceFor(personKey, currency);
     if (bal <= 0) {
       return NextResponse.json(
@@ -66,10 +65,10 @@ export async function POST(request: Request) {
       description: string | null;
       created_at: string;
     }>(
-      `INSERT INTO debt_reductions (person_name, amount, currency, description, category)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO debt_reductions_v2 (person_name, amount, currency, description)
+       VALUES ($1, $2, $3, $4)
        RETURNING id, person_name, amount::text AS amount, currency, description, created_at`,
-      [personKey, amount, currency, description, DEFAULT_DEBT_CATEGORY]
+      [personKey, amount, currency, description]
     );
     return NextResponse.json(rows[0]);
   } catch (e) {
