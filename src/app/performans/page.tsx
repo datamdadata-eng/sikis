@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
+  HandCoins,
   LogOut,
   Package,
   ReceiptText,
@@ -192,6 +193,12 @@ export default function PerformansPage() {
               <Link href="/hakedis" className="gap-2">
                 <CircleDollarSign className="size-4" />
                 Hakediş
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" className="gap-2" asChild>
+              <Link href="/para-kime-gitti">
+                <HandCoins className="size-4" />
+                Para Kime Gitti
               </Link>
             </Button>
             <Button variant="secondary" size="sm" className="gap-2" asChild>

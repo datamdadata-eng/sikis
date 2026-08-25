@@ -34,6 +34,8 @@ type ExtrasRow = {
   week_total_percent: string;
   jin_percent: string;
   arsimet_percent: string;
+  captian_percent: string;
+  mesai_percent: string;
   sales_hakedis_pool_try: string;
   closer_hakedis_pool_try: string;
 };
@@ -45,11 +47,15 @@ async function ensureDailyExtrasTable() {
       week_total_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
       jin_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
       arsimet_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
+      captian_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
+      mesai_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
       sales_hakedis_pool_try NUMERIC(14,2) NOT NULL DEFAULT 0,
       closer_hakedis_pool_try NUMERIC(14,2) NOT NULL DEFAULT 0,
       updated_at TIMESTAMPTZ DEFAULT now()
     );
   `);
+  await query(`ALTER TABLE hakedis_day_extras ADD COLUMN IF NOT EXISTS mesai_percent NUMERIC(6,2) NOT NULL DEFAULT 0;`);
+  await query(`ALTER TABLE hakedis_day_extras ADD COLUMN IF NOT EXISTS captian_percent NUMERIC(6,2) NOT NULL DEFAULT 0;`);
 }
 
 export async function POST(request: Request) {
@@ -68,23 +74,27 @@ export async function POST(request: Request) {
   const hasWeekTotal = body.weekTotalPercent !== undefined && body.weekTotalPercent !== null;
   const hasJin = body.jinPercent !== undefined && body.jinPercent !== null;
   const hasArsimet = body.arsimetPercent !== undefined && body.arsimetPercent !== null;
+  const hasCaptian = body.captianPercent !== undefined && body.captianPercent !== null;
+  const hasMesai = body.mesaiPercent !== undefined && body.mesaiPercent !== null;
   const hasSalesPool = body.salesHakedisPoolTry !== undefined && body.salesHakedisPoolTry !== null;
   const hasCloserPool = body.closerHakedisPoolTry !== undefined && body.closerHakedisPoolTry !== null;
 
-  if (!hasWeekTotal && !hasJin && !hasArsimet && !hasSalesPool && !hasCloserPool) {
+  if (!hasWeekTotal && !hasJin && !hasArsimet && !hasCaptian && !hasMesai && !hasSalesPool && !hasCloserPool) {
     return NextResponse.json({ error: "no_fields" }, { status: 400 });
   }
 
   let weekTotalPercent = 0;
   let jinPercent = 0;
   let arsimetPercent = 0;
+  let captianPercent = 0;
+  let mesaiPercent = 0;
   let salesHakedisPoolTry = 0;
   let closerHakedisPoolTry = 0;
 
   try {
     await ensureDailyExtrasTable();
     const cur = await query<ExtrasRow>(
-      `SELECT week_total_percent::text, jin_percent::text, arsimet_percent::text,
+      `SELECT week_total_percent::text, jin_percent::text, arsimet_percent::text, captian_percent::text, mesai_percent::text,
               sales_hakedis_pool_try::text, closer_hakedis_pool_try::text
        FROM hakedis_day_extras WHERE day_date = $1::date`,
       [weekStart]
@@ -93,6 +103,8 @@ export async function POST(request: Request) {
       weekTotalPercent = Number(cur.rows[0].week_total_percent);
       jinPercent = Number(cur.rows[0].jin_percent);
       arsimetPercent = Number(cur.rows[0].arsimet_percent);
+      captianPercent = Number(cur.rows[0].captian_percent);
+      mesaiPercent = Number(cur.rows[0].mesai_percent);
       salesHakedisPoolTry = Number(cur.rows[0].sales_hakedis_pool_try);
       closerHakedisPoolTry = Number(cur.rows[0].closer_hakedis_pool_try);
     }
@@ -120,6 +132,12 @@ export async function POST(request: Request) {
   if (hasArsimet) {
     arsimetPercent = clampPct(Number(body.arsimetPercent), 100);
   }
+  if (hasCaptian) {
+    captianPercent = clampPct(Number(body.captianPercent), 100);
+  }
+  if (hasMesai) {
+    mesaiPercent = clampPct(Number(body.mesaiPercent), 100);
+  }
   if (hasSalesPool) {
     salesHakedisPoolTry = clampPool(Number(body.salesHakedisPoolTry));
   }
@@ -131,19 +149,21 @@ export async function POST(request: Request) {
     await query(
       `
       INSERT INTO hakedis_day_extras (
-        day_date, week_total_percent, jin_percent, arsimet_percent,
+        day_date, week_total_percent, jin_percent, arsimet_percent, captian_percent, mesai_percent,
         sales_hakedis_pool_try, closer_hakedis_pool_try
       )
-      VALUES ($1::date, $2, $3, $4, $5, $6)
+      VALUES ($1::date, $2, $3, $4, $5, $6, $7, $8)
       ON CONFLICT (day_date) DO UPDATE SET
         week_total_percent = EXCLUDED.week_total_percent,
         jin_percent = EXCLUDED.jin_percent,
         arsimet_percent = EXCLUDED.arsimet_percent,
+        captian_percent = EXCLUDED.captian_percent,
+        mesai_percent = EXCLUDED.mesai_percent,
         sales_hakedis_pool_try = EXCLUDED.sales_hakedis_pool_try,
         closer_hakedis_pool_try = EXCLUDED.closer_hakedis_pool_try,
         updated_at = now()
     `,
-      [weekStart, weekTotalPercent, jinPercent, arsimetPercent, salesHakedisPoolTry, closerHakedisPoolTry]
+      [weekStart, weekTotalPercent, jinPercent, arsimetPercent, captianPercent, mesaiPercent, salesHakedisPoolTry, closerHakedisPoolTry]
     );
     return NextResponse.json({ ok: true });
   } catch (e) {

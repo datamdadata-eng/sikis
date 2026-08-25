@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Package, LogOut, Calendar, Banknote, ChevronLeft, ChevronRight, CircleDollarSign, ReceiptText, BarChart3 } from "lucide-react";
+import { Package, LogOut, Calendar, Banknote, ChevronLeft, ChevronRight, CircleDollarSign, ReceiptText, BarChart3, HandCoins } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,8 @@ type PersonRow = {
   total_amount: string;
   /** Kayıtlı hakediş % */
   rate_percent: number;
+  mesai_percent: number;
+  effective_rate_percent: number;
   hakedis_try: string;
 };
 
@@ -37,8 +39,11 @@ type HakedisExtras = {
   weekTotalPercent: number;
   jinPercent: number;
   arsimetPercent: number;
+  captianPercent: number;
+  mesaiPercent: number;
   jinHakedisTry: string;
   arsimetHakedisTry: string;
+  captianHakedisTry: string;
 };
 
 type HakedisData = {
@@ -140,6 +145,8 @@ export default function HakedisPage() {
     weekTotalPercent?: number;
     jinPercent?: number;
     arsimetPercent?: number;
+    captianPercent?: number;
+    mesaiPercent?: number;
   }) => {
     if (!data) return;
     const token = typeof window !== "undefined" ? window.localStorage.getItem("satistakip-token") : null;
@@ -149,7 +156,11 @@ export default function HakedisPage() {
         ? "extras:week"
         : partial.jinPercent !== undefined
           ? "extras:jin"
-          : "extras:arsimet";
+          : partial.captianPercent !== undefined
+            ? "extras:captian"
+            : partial.arsimetPercent !== undefined
+            ? "extras:arsimet"
+            : "extras:mesai";
     setSavingKey(sk);
     try {
       const res = await fetch("/api/hakedis/extras", {
@@ -295,6 +306,12 @@ export default function HakedisPage() {
                 Performans
               </Link>
             </Button>
+            <Button variant="ghost" size="sm" className="gap-2" asChild>
+              <Link href="/para-kime-gitti">
+                <HandCoins className="size-4" />
+                Para Kime Gitti
+              </Link>
+            </Button>
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -322,8 +339,9 @@ export default function HakedisPage() {
             <p className="text-sm text-muted-foreground">
               Günlük: Kişi başı <strong className="text-foreground">hakediş %</strong>{" "}
               kullanıcıda sabit; tutar, hakediş matrahı x % / 100. Aynı satışta hem açıp hem kapattıysanız matrah iki
-              rol için 2x, tabloda gösterilen günlük ciro ise işlem tutarı 1x. JIN ve ARSIMET gün satış toplamı
-              üzerinden %; günlük toplam % yalnızca kayıt / nottur.
+              rol için 2x, tabloda gösterilen günlük ciro ise işlem tutarı 1x. JIN, ARSIMET ve CAPTIAN gün satış toplamı
+              üzerinden %; günlük toplam % yalnızca kayıt / nottur. Mesai artışı yalnızca kişi hakediş oranlarına
+              o güne özel eklenir.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -359,23 +377,26 @@ export default function HakedisPage() {
               weekTotalPercent: 0,
               jinPercent: 0,
               arsimetPercent: 0,
+              captianPercent: 0,
+              mesaiPercent: 0,
               jinHakedisTry: "0",
               arsimetHakedisTry: "0",
+              captianHakedisTry: "0",
             };
             const wtt = Number(ex.weekTotalTry);
             const usdWeek = tryToUsd(wtt);
             const totalPeopleHakedisTry = data.people.reduce((s, r) => s + Number(r.hakedis_try), 0);
             const weekHakedisGrandTry =
-              totalPeopleHakedisTry + Number(ex.jinHakedisTry) + Number(ex.arsimetHakedisTry);
+              totalPeopleHakedisTry + Number(ex.jinHakedisTry) + Number(ex.arsimetHakedisTry) + Number(ex.captianHakedisTry);
             const usdWeekHakedisGrand = tryToUsd(weekHakedisGrandTry);
             return (
               <div className="space-y-6">
                 <Card className="border-primary/25">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg">JIN · ARSIMET · gün toplamı</CardTitle>
+                    <CardTitle className="text-lg">JIN · ARSIMET · CAPTIAN · gün toplamı</CardTitle>
                     <p className="text-xs text-muted-foreground">
                       Bu günün <strong className="text-foreground">tüm satış</strong> toplamı (tüm satırlar) üzerinden
-                      JIN ve ARSIMET hakediş %. Günlük toplam % alanı yalnızca kayıt / not (hakediş hesabına girmez).
+                      JIN, ARSIMET ve CAPTIAN hakediş %. Günlük toplam % alanı yalnızca kayıt / not (hakediş hesabına girmez).
                     </p>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -409,6 +430,28 @@ export default function HakedisPage() {
                           }}
                         />
                       </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Mesai hakediş artışı % (o güne özel)</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={0.01}
+                          className="h-9 w-36"
+                          defaultValue={ex.mesaiPercent}
+                          key={`${data.weekStart}-mesai-${ex.mesaiPercent}`}
+                          disabled={savingKey === "extras:mesai"}
+                          onBlur={(e) => {
+                            const v = Number(e.target.value);
+                            if (Number.isNaN(v) || v < 0 || v > 100) {
+                              e.target.value = String(ex.mesaiPercent);
+                              return;
+                            }
+                            if (Math.abs(v - ex.mesaiPercent) < 1e-6) return;
+                            void saveExtras({ mesaiPercent: v });
+                          }}
+                        />
+                      </div>
                     </div>
                     <div className="hidden border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_5.5rem_minmax(0,1fr)] sm:items-center sm:gap-3">
                       <span>İsim</span>
@@ -416,10 +459,10 @@ export default function HakedisPage() {
                       <span className="text-center">Hakediş %</span>
                       <span className="text-right">Hakediş tutarı</span>
                     </div>
-                    {(["JIN", "ARSIMET"] as const).map((name, idx) => {
-                      const pct = name === "JIN" ? ex.jinPercent : ex.arsimetPercent;
-                      const hk = name === "JIN" ? Number(ex.jinHakedisTry) : Number(ex.arsimetHakedisTry);
-                      const saveKey = name === "JIN" ? "extras:jin" : "extras:arsimet";
+                    {(["JIN", "ARSIMET", "CAPTIAN"] as const).map((name, idx) => {
+                      const pct = name === "JIN" ? ex.jinPercent : name === "ARSIMET" ? ex.arsimetPercent : ex.captianPercent;
+                      const hk = name === "JIN" ? Number(ex.jinHakedisTry) : name === "ARSIMET" ? Number(ex.arsimetHakedisTry) : Number(ex.captianHakedisTry);
+                      const saveKey = name === "JIN" ? "extras:jin" : name === "ARSIMET" ? "extras:arsimet" : "extras:captian";
                       const usdHakedis = tryToUsd(hk);
                       return (
                         <div
@@ -452,7 +495,7 @@ export default function HakedisPage() {
                                   return;
                                 }
                                 if (Math.abs(v - pct) < 1e-6) return;
-                                void saveExtras(name === "JIN" ? { jinPercent: v } : { arsimetPercent: v });
+                                void saveExtras(name === "JIN" ? { jinPercent: v } : name === "ARSIMET" ? { arsimetPercent: v } : { captianPercent: v });
                               }}
                             />
                           </div>
@@ -473,14 +516,14 @@ export default function HakedisPage() {
                     <p className="text-xs text-muted-foreground">
                       <strong className="text-foreground">Günlük ciro</strong> aynı satışta hem açıp hem kapattıysanız tutarı
                       bir kez gösterir. <strong className="text-foreground">Hakediş tutarı</strong> bu satırlarda iki rol matrahı
-                      (2×) üzerinden hesaplanır; % kullanıcıda sabittir.
+                      (2×) üzerinden hesaplanır. Mesai varsa o güne ait artış, kullanıcı yüzdesine eklenir.
                     </p>
                   </CardHeader>
                   <CardContent className="space-y-0 p-0">
                     <div className="hidden border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_5.5rem_minmax(0,1fr)] sm:items-center sm:gap-3 sm:px-6">
                       <span>İsim</span>
                       <span className="text-right">Günlük ciro (toplam)</span>
-                      <span className="text-center">Hakediş %</span>
+                      <span className="text-center">Hakediş % + mesai</span>
                       <span className="text-right">Hakediş tutarı</span>
                     </div>
                     <div className="divide-y divide-border">
@@ -508,7 +551,7 @@ export default function HakedisPage() {
                                   <p className="text-xs text-muted-foreground sm:text-right">{formatUsd(usdCiro)}</p>
                                 )}
                               </div>
-                              <div className="flex items-center justify-center gap-2 sm:justify-center">
+                              <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-center">
                                 <span className="text-xs text-muted-foreground sm:hidden">Hakediş %</span>
                                 <Input
                                   type="number"
@@ -529,6 +572,9 @@ export default function HakedisPage() {
                                     void saveUserHakedisPercent({ userId: r.user_id, percentage: v });
                                   }}
                                 />
+                                {r.mesai_percent > 0 && (
+                                  <span className="text-xs text-muted-foreground">+ %{formatNumberTr(r.mesai_percent)} = %{formatNumberTr(r.effective_rate_percent)}</span>
+                                )}
                               </div>
                               <div className="text-right">
                                 <p className="text-sm font-semibold text-foreground">{formatNumberTr(hk)} ₺</p>
@@ -563,7 +609,7 @@ export default function HakedisPage() {
                       <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
                         <div>
                           <p className="text-sm font-semibold text-foreground">Bu gün hakediş toplamı</p>
-                          <p className="text-xs text-muted-foreground">Kişiler + JIN + ARSIMET (₺)</p>
+                          <p className="text-xs text-muted-foreground">Kişiler + JIN + ARSIMET + CAPTIAN (₺)</p>
                         </div>
                         <div className="text-left sm:text-right">
                           <p className="text-xl font-bold tabular-nums text-primary">{formatNumberTr(weekHakedisGrandTry)} ₺</p>

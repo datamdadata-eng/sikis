@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Package, LogOut, Calendar, Banknote, Plus, Trash2, CircleDollarSign, MinusCircle, ReceiptText, BarChart3 } from "lucide-react";
+import { Package, LogOut, Calendar, Banknote, Plus, Trash2, CircleDollarSign, MinusCircle, ReceiptText, BarChart3, HandCoins } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -491,6 +491,12 @@ export default function BorcPage() {
               <Link href="/hakedis">
                 <CircleDollarSign className="size-4" />
                 Hakediş
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" className="gap-2" asChild>
+              <Link href="/para-kime-gitti">
+                <HandCoins className="size-4" />
+                Para Kime Gitti
               </Link>
             </Button>
             <Button variant="ghost" size="sm" className="gap-2" asChild>

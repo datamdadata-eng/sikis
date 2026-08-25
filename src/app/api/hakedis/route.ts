@@ -13,11 +13,15 @@ async function ensureDailyExtrasTable() {
       week_total_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
       jin_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
       arsimet_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
+      captian_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
+      mesai_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
       sales_hakedis_pool_try NUMERIC(14,2) NOT NULL DEFAULT 0,
       closer_hakedis_pool_try NUMERIC(14,2) NOT NULL DEFAULT 0,
       updated_at TIMESTAMPTZ DEFAULT now()
     );
   `);
+  await query(`ALTER TABLE hakedis_day_extras ADD COLUMN IF NOT EXISTS mesai_percent NUMERIC(6,2) NOT NULL DEFAULT 0;`);
+  await query(`ALTER TABLE hakedis_day_extras ADD COLUMN IF NOT EXISTS captian_percent NUMERIC(6,2) NOT NULL DEFAULT 0;`);
 }
 
 export async function GET(request: Request) {
@@ -186,6 +190,8 @@ export async function GET(request: Request) {
   let weekTotalPercent = 0;
   let jinPercent = 0;
   let arsimetPercent = 0;
+  let captianPercent = 0;
+  let mesaiPercent = 0;
 
   try {
     await ensureDailyExtrasTable();
@@ -193,9 +199,11 @@ export async function GET(request: Request) {
       week_total_percent: string;
       jin_percent: string;
       arsimet_percent: string;
+      captian_percent: string;
+      mesai_percent: string;
     }>(
       `
-      SELECT week_total_percent::text, jin_percent::text, arsimet_percent::text
+      SELECT week_total_percent::text, jin_percent::text, arsimet_percent::text, captian_percent::text, mesai_percent::text
       FROM hakedis_day_extras
       WHERE day_date = $1::date
     `,
@@ -205,6 +213,8 @@ export async function GET(request: Request) {
       weekTotalPercent = Number(ex.rows[0].week_total_percent);
       jinPercent = Number(ex.rows[0].jin_percent);
       arsimetPercent = Number(ex.rows[0].arsimet_percent);
+      captianPercent = Number(ex.rows[0].captian_percent);
+      mesaiPercent = Number(ex.rows[0].mesai_percent);
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -216,16 +226,20 @@ export async function GET(request: Request) {
   const weekTotalNum = Number(weekTotalTry);
   const jinHakedisTry = (weekTotalNum * jinPercent) / 100;
   const arsimetHakedisTry = (weekTotalNum * arsimetPercent) / 100;
+  const captianHakedisTry = (weekTotalNum * captianPercent) / 100;
 
   const people = personRows.map((row) => {
-    const rate = Number(row.default_hakedis_percent ?? 0);
+    const baseRate = Number(row.default_hakedis_percent ?? 0);
+    const rate = Math.min(100, baseRate + mesaiPercent);
     const hakedisBase = Number(row.hakedis_base_amount ?? row.total_amount);
     const hk = (hakedisBase * rate) / 100;
     return {
       user_id: row.user_id,
       user_name: row.user_name,
       total_amount: row.total_amount,
-      rate_percent: Number(rate.toFixed(2)),
+      rate_percent: Number(baseRate.toFixed(2)),
+      mesai_percent: Number(mesaiPercent.toFixed(2)),
+      effective_rate_percent: Number(rate.toFixed(2)),
       hakedis_try: hk.toFixed(2),
     };
   });
@@ -242,8 +256,11 @@ export async function GET(request: Request) {
       weekTotalPercent,
       jinPercent,
       arsimetPercent,
+      captianPercent,
+      mesaiPercent,
       jinHakedisTry: jinHakedisTry.toFixed(2),
       arsimetHakedisTry: arsimetHakedisTry.toFixed(2),
+      captianHakedisTry: captianHakedisTry.toFixed(2),
     },
     tryPerUsd: fx.tryPerUsd,
     fxDate: fx.fxDate,

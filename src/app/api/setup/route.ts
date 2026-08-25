@@ -187,8 +187,25 @@ export async function POST() {
         week_total_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
         jin_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
         arsimet_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
+        captian_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
+        mesai_percent NUMERIC(6,2) NOT NULL DEFAULT 0,
         sales_hakedis_pool_try NUMERIC(14,2) NOT NULL DEFAULT 0,
         closer_hakedis_pool_try NUMERIC(14,2) NOT NULL DEFAULT 0,
+        updated_at TIMESTAMPTZ DEFAULT now()
+      );
+    `);
+
+    await query(`ALTER TABLE hakedis_day_extras ADD COLUMN IF NOT EXISTS mesai_percent NUMERIC(6,2) NOT NULL DEFAULT 0;`);
+    await query(`ALTER TABLE hakedis_day_extras ADD COLUMN IF NOT EXISTS captian_percent NUMERIC(6,2) NOT NULL DEFAULT 0;`);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS money_distributions (
+        id SERIAL PRIMARY KEY,
+        recipient_id INTEGER NOT NULL REFERENCES money_recipients(id) ON DELETE RESTRICT,
+        amount_try NUMERIC(14,2) NOT NULL CHECK (amount_try >= 0),
+        percentage NUMERIC(6,2) NOT NULL CHECK (percentage >= 0 AND percentage <= 100),
+        distribution_date DATE NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT now(),
         updated_at TIMESTAMPTZ DEFAULT now()
       );
     `);
