@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CircleDollarSign } from "lucide-react";
+import { CircleDollarSign, Radio } from "lucide-react";
 
 const formatNumberTr = (value: number) =>
   new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
@@ -43,28 +43,31 @@ export function LiveFxBar() {
   }, []);
 
   useEffect(() => {
-    void loadFx();
-    const fxId = setInterval(() => void loadFx(), 1000);
+    const initialFxId = setTimeout(() => void loadFx(), 0);
+    const fxId = setInterval(() => void loadFx(), 60_000);
     const clockId = setInterval(() => setClock(formatIstanbulDateTime()), 1000);
     return () => {
+      clearTimeout(initialFxId);
       clearInterval(fxId);
       clearInterval(clockId);
     };
   }, [loadFx]);
 
   return (
-    <div className="border-b border-border bg-card/90 backdrop-blur-md supports-[backdrop-filter]:bg-card/75">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 text-xs text-muted-foreground sm:px-4 sm:text-sm">
+    <div className="border-b border-border bg-[#0c1220]/80 backdrop-blur-xl supports-[backdrop-filter]:bg-[#0c1220]/70">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 text-[11px] text-muted-foreground sm:px-4 sm:text-xs">
+        <span className="flex items-center gap-1.5 font-medium text-primary"><Radio className="size-3 animate-pulse" /> CANLI</span>
+        <span className="hidden h-3 w-px bg-border sm:block" />
         <CircleDollarSign className="size-3.5 shrink-0 text-primary sm:size-4" aria-hidden />
         {fx != null && fx.tryPerUsd > 0 && !fx.fxError ? (
           <>
             <span>
-              Güncel kur (Frankfurter, her saniye):{" "}
+              USD / TRY: {" "}
               <strong className="text-foreground">1 USD = {formatNumberTr(fx.tryPerUsd)} ₺</strong>
             </span>
             {fx.fxDate && (
               <span className="text-muted-foreground">
-                · Kur tabanı: <span className="text-foreground">{fx.fxDate}</span>
+                · Kur: <span className="text-foreground">{fx.fxDate}</span>
               </span>
             )}
             <span className="text-muted-foreground">

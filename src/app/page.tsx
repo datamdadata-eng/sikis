@@ -538,8 +538,8 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <nav className="sticky top-0 z-40 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-1">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
             <Button variant="secondary" size="sm" className="gap-2" asChild>
               <Link href="/">
                 <Package className="size-4" />

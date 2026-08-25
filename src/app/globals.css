@@ -1,27 +1,26 @@
 @import "tailwindcss";
 
 :root {
-  /* Metalik / slate tonları – koyu ama yumuşak */
-  --background: #1a1f26;
-  --foreground: #e2e8f0;
-  --card: #222831;
-  --card-foreground: #e2e8f0;
-  --popover: #252b35;
-  --popover-foreground: #e2e8f0;
-  --primary: #10b981;
-  --primary-foreground: #022c22;
-  --secondary: #2d3542;
-  --secondary-foreground: #e2e8f0;
-  --muted: #2d3542;
-  --muted-foreground: #94a3b8;
-  --accent: #374151;
-  --accent-foreground: #f1f5f9;
-  --destructive: #ef4444;
-  --destructive-foreground: #fef2f2;
-  --border: #3d4a5c;
-  --input: #3d4a5c;
-  --ring: #10b981;
-  --radius: 0.5rem;
+  --background: #080b14;
+  --foreground: #f4f7ff;
+  --card: rgba(16, 22, 37, 0.78);
+  --card-foreground: #f4f7ff;
+  --popover: #141b2b;
+  --popover-foreground: #f4f7ff;
+  --primary: #39e6a3;
+  --primary-foreground: #042a20;
+  --secondary: #1d2940;
+  --secondary-foreground: #e9efff;
+  --muted: #172137;
+  --muted-foreground: #94a6c5;
+  --accent: #263755;
+  --accent-foreground: #ffffff;
+  --destructive: #ff6b82;
+  --destructive-foreground: #fff5f7;
+  --border: rgba(148, 166, 197, 0.17);
+  --input: rgba(148, 166, 197, 0.22);
+  --ring: #39e6a3;
+  --radius: 0.95rem;
 }
 
 @theme inline {
@@ -46,22 +45,55 @@
   --color-ring: var(--ring);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --radius-sm: calc(var(--radius) - 2px);
-  --radius-md: calc(var(--radius) - 1px);
+  --radius-sm: calc(var(--radius) - 5px);
+  --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl: calc(var(--radius) + 7px);
 }
+
+* { border-color: var(--border); }
+
+html { background: var(--background); }
 
 body {
-  background: var(--background);
+  min-height: 100vh;
+  background:
+    radial-gradient(900px 520px at -10% -12%, rgba(57, 230, 163, 0.15), transparent 58%),
+    radial-gradient(760px 460px at 108% 4%, rgba(79, 124, 255, 0.16), transparent 55%),
+    linear-gradient(145deg, #080b14 0%, #0b1020 48%, #080b14 100%);
+  background-attachment: fixed;
   color: var(--foreground);
-  font-family: var(--font-sans), system-ui, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  letter-spacing: -0.01em;
 }
 
-/* Hafif metalik gradient arka plan (opsiyonel derinlik) */
-@media (min-width: 1024px) {
-  body {
-    background: linear-gradient(160deg, #1a1f26 0%, #1e242d 50%, #1a1f26 100%);
-    background-attachment: fixed;
-  }
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.22;
+  background-image: linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(to bottom, black, transparent 82%);
+}
+
+::selection { background: rgba(57, 230, 163, 0.28); color: #fff; }
+
+nav {
+  border-color: rgba(148, 166, 197, 0.15) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
+}
+
+main, main + div { position: relative; }
+
+table { border-collapse: separate; border-spacing: 0; }
+table thead { background: rgba(38, 55, 85, 0.54) !important; }
+table tbody tr { transition: background-color 160ms ease; }
+table tbody tr:hover { background: rgba(57, 230, 163, 0.035); }
+
+@media (max-width: 640px) {
+  body { background-attachment: scroll; }
+  h1 { font-size: 1.55rem !important; }
 }
