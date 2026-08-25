@@ -36,7 +36,6 @@ type PersonRow = {
 
 type HakedisExtras = {
   weekTotalTry: string;
-  weekTotalPercent: number;
   jinPercent: number;
   arsimetPercent: number;
   captianPercent: number;
@@ -142,7 +141,6 @@ export default function HakedisPage() {
   };
 
   const saveExtras = async (partial: {
-    weekTotalPercent?: number;
     jinPercent?: number;
     arsimetPercent?: number;
     captianPercent?: number;
@@ -152,9 +150,7 @@ export default function HakedisPage() {
     const token = typeof window !== "undefined" ? window.localStorage.getItem("satistakip-token") : null;
     if (!token) return;
     const sk =
-      partial.weekTotalPercent !== undefined
-        ? "extras:week"
-        : partial.jinPercent !== undefined
+      partial.jinPercent !== undefined
           ? "extras:jin"
           : partial.captianPercent !== undefined
             ? "extras:captian"
@@ -340,8 +336,7 @@ export default function HakedisPage() {
               Günlük: Kişi başı <strong className="text-foreground">hakediş %</strong>{" "}
               kullanıcıda sabit; tutar, hakediş matrahı x % / 100. Aynı satışta hem açıp hem kapattıysanız matrah iki
               rol için 2x, tabloda gösterilen günlük ciro ise işlem tutarı 1x. JIN, ARSIMET ve CAPTIAN gün satış toplamı
-              üzerinden %; günlük toplam % yalnızca kayıt / nottur. Mesai artışı yalnızca kişi hakediş oranlarına
-              o güne özel eklenir.
+              üzerinden hesaplanır. Mesai artışı yalnızca kişi hakediş oranlarına o güne özel eklenir.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -374,7 +369,6 @@ export default function HakedisPage() {
           (() => {
             const ex = data.extras ?? {
               weekTotalTry: "0",
-              weekTotalPercent: 0,
               jinPercent: 0,
               arsimetPercent: 0,
               captianPercent: 0,
@@ -408,28 +402,6 @@ export default function HakedisPage() {
                       )}
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-4">
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Günlük toplam % (kayıt)</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={100}
-                          step={0.01}
-                          className="h-9 w-28"
-                          defaultValue={ex.weekTotalPercent}
-                          key={`${data.weekStart}-week-total-${ex.weekTotalPercent}`}
-                          disabled={savingKey === "extras:week"}
-                          onBlur={(e) => {
-                            const v = Number(e.target.value);
-                            if (Number.isNaN(v) || v < 0 || v > 100) {
-                              e.target.value = String(ex.weekTotalPercent);
-                              return;
-                            }
-                            if (Math.abs(v - ex.weekTotalPercent) < 1e-6) return;
-                            void saveExtras({ weekTotalPercent: v });
-                          }}
-                        />
-                      </div>
                       <div className="space-y-1">
                         <Label className="text-xs text-muted-foreground">Mesai hakediş artışı % (o güne özel)</Label>
                         <Input
