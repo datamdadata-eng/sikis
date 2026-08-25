@@ -20,9 +20,11 @@ export async function POST() {
       CREATE TABLE IF NOT EXISTS money_recipients (
         id SERIAL PRIMARY KEY,
         name TEXT NOT NULL,
+        default_percentage NUMERIC(6,2) NOT NULL DEFAULT 0,
         created_at TIMESTAMPTZ DEFAULT now()
       );
     `);
+    await query(`ALTER TABLE money_recipients ADD COLUMN IF NOT EXISTS default_percentage NUMERIC(6,2) NOT NULL DEFAULT 0;`);
 
     await query(`
       CREATE TABLE IF NOT EXISTS sales (

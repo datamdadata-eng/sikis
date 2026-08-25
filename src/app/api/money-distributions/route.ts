@@ -17,27 +17,13 @@ function isAuthorized(request: Request) {
   }
 }
 
-async function ensureTable() {
-  await query(`
-    CREATE TABLE IF NOT EXISTS money_distributions (
-      id SERIAL PRIMARY KEY,
-      recipient_id INTEGER NOT NULL REFERENCES money_recipients(id) ON DELETE RESTRICT,
-      amount_try NUMERIC(14,2) NOT NULL CHECK (amount_try >= 0),
-      percentage NUMERIC(6,2) NOT NULL CHECK (percentage >= 0 AND percentage <= 100),
-      distribution_date DATE NOT NULL,
-      created_at TIMESTAMPTZ DEFAULT now(),
-      updated_at TIMESTAMPTZ DEFAULT now()
-    );
-  `);
-}
-
 export async function GET(request: Request) {
   if (!isAuthorized(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const date = new URL(request.url).searchParams.get("date") ?? "";
   if (!DATE_RE.test(date)) return NextResponse.json({ error: "invalid_date" }, { status: 400 });
 
   try {
-    await ensureTable();
+    await query(`ALTER TABLE money_recipients ADD COLUMN IF NOT EXISTS default_percentage NUMERIC(6,2) NOT NULL DEFAULT 0;`);
     const [rows, fx] = await Promise.all([
       query<{
         id: number;
@@ -45,14 +31,15 @@ export async function GET(request: Request) {
         recipient_name: string;
         amount_try: string;
         percentage: string;
-        distribution_date: string;
       }>(`
-        SELECT d.id, d.recipient_id, r.name AS recipient_name, d.amount_try::text,
-               d.percentage::text, d.distribution_date::text
-        FROM money_distributions d
-        INNER JOIN money_recipients r ON r.id = d.recipient_id
-        WHERE d.distribution_date = $1::date
-        ORDER BY d.id DESC
+        SELECT r.id, r.id AS recipient_id, r.name AS recipient_name,
+               COALESCE(SUM(s.amount), 0)::text AS amount_try,
+               r.default_percentage::text AS percentage
+        FROM money_recipients r
+        LEFT JOIN sales s ON s.recipient_id = r.id
+          AND (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date = $1::date
+        GROUP BY r.id, r.name, r.default_percentage
+        ORDER BY r.name ASC
       `, [date]),
       fetchTryPerUsd(),
     ]);
@@ -60,29 +47,5 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("[money-distributions GET]", error);
     return NextResponse.json({ error: "read_failed" }, { status: 500 });
-  }
-}
-
-export async function POST(request: Request) {
-  if (!isAuthorized(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const body = await request.json().catch(() => ({}));
-  const recipientId = Number(body.recipientId);
-  const amountTry = Number(body.amountTry);
-  const percentage = Number(body.percentage);
-  const date = String(body.date ?? "");
-  if (!Number.isInteger(recipientId) || recipientId <= 0 || !Number.isFinite(amountTry) || amountTry < 0 || !Number.isFinite(percentage) || percentage < 0 || percentage > 100 || !DATE_RE.test(date)) {
-    return NextResponse.json({ error: "invalid_input" }, { status: 400 });
-  }
-  try {
-    await ensureTable();
-    const { rows } = await query<{ id: number }>(
-      `INSERT INTO money_distributions (recipient_id, amount_try, percentage, distribution_date)
-       VALUES ($1, $2, $3, $4::date) RETURNING id`,
-      [recipientId, amountTry, percentage, date]
-    );
-    return NextResponse.json({ id: rows[0].id });
-  } catch (error) {
-    console.error("[money-distributions POST]", error);
-    return NextResponse.json({ error: "save_failed" }, { status: 500 });
   }
 }
