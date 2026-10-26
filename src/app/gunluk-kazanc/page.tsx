@@ -24,13 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,7 +44,7 @@ type ProfitData = {
   date: string;
   revenueTry: number;
   hakedisTry: number;
-  sahanyaTry: number;
+  recipientSharesTry: number;
   expensesTry: number;
   netTry: number;
   expenses: Expense[];
@@ -79,7 +73,6 @@ export default function GunlukKazancPage() {
   const [date, setDate] = useState(todayInIstanbul);
   const [data, setData] = useState<ProfitData | null>(null);
   const [label, setLabel] = useState("");
-  const [kind, setKind] = useState<"percent" | "usd">("percent");
   const [value, setValue] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -135,7 +128,7 @@ export default function GunlukKazancPage() {
   const addExpense = async () => {
     const token = getToken();
     const numericValue = Number(value.replace(",", "."));
-    if (!token || !label.trim() || !Number.isFinite(numericValue) || numericValue <= 0 || (kind === "percent" && numericValue > 100)) {
+    if (!token || !label.trim() || !Number.isFinite(numericValue) || numericValue <= 0) {
       setError("Gider adı ve geçerli bir değer girin.");
       return;
     }
@@ -149,7 +142,7 @@ export default function GunlukKazancPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ date, label: label.trim(), kind, value: numericValue }),
+        body: JSON.stringify({ date, label: label.trim(), value: numericValue }),
       });
       if (!response.ok) throw new Error("save_failed");
       setLabel("");
@@ -211,7 +204,7 @@ export default function GunlukKazancPage() {
   const summaryCards = [
     { label: "Toplam kazanılan", value: data?.revenueTry ?? 0, icon: ArrowUpRight, tone: "text-emerald-500" },
     { label: "Dağıtılan hakediş", value: data?.hakedisTry ?? 0, icon: HandCoins, tone: "text-amber-500" },
-    { label: "Sahanya kesintisi", value: data?.sahanyaTry ?? 0, icon: ArrowDownRight, tone: "text-orange-500" },
+    { label: "Kişilere giden pay", value: data?.recipientSharesTry ?? 0, icon: ArrowDownRight, tone: "text-orange-500" },
     { label: "Diğer giderler", value: data?.expensesTry ?? 0, icon: ReceiptText, tone: "text-rose-500" },
   ];
 
@@ -252,7 +245,7 @@ export default function GunlukKazancPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Günlük Net Kazanç</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Günlük cirodan hakedişleri, Sahanya payını ve ek giderleri düşer.
+              Günlük cirodan hakedişleri, Para Kime Gitti paylarını ve dolar giderlerini düşer.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -305,34 +298,24 @@ export default function GunlukKazancPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Günlük gider ekle</CardTitle>
-            <p className="text-sm text-muted-foreground">Gideri cironun yüzdesi veya dolar tutarı olarak kaydedebilirsin.</p>
+            <p className="text-sm text-muted-foreground">Gider açıklamasını ve dolar tutarını gir; sistem güncel kurla TL karşılığını hesaplar.</p>
           </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-[minmax(0,1fr)_11rem_10rem_auto] md:items-end">
+          <CardContent className="grid gap-3 md:grid-cols-[minmax(0,1fr)_10rem_auto] md:items-end">
             <div className="space-y-2">
               <Label htmlFor="expense-label">Gider adı</Label>
               <Input id="expense-label" value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Reklam, araç, servis…" />
             </div>
+
             <div className="space-y-2">
-              <Label>Gider türü</Label>
-              <Select value={kind} onValueChange={(next: "percent" | "usd") => setKind(next)}>
-                <SelectTrigger aria-label="Gider türü"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="percent">Ciro yüzdesi</SelectItem>
-                  <SelectItem value="usd">Dolar tutarı</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="expense-value">{kind === "percent" ? "Yüzde" : "Dolar"}</Label>
+              <Label htmlFor="expense-value">Dolar tutarı</Label>
               <Input
                 id="expense-value"
                 type="number"
                 min="0"
-                max={kind === "percent" ? "100" : undefined}
                 step="0.01"
                 value={value}
                 onChange={(event) => setValue(event.target.value)}
-                placeholder={kind === "percent" ? "%0" : "$0"}
+                placeholder="$0"
               />
             </div>
             <Button onClick={() => void addExpense()} disabled={saving}>
@@ -372,7 +355,7 @@ export default function GunlukKazancPage() {
         </Card>
 
         <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
-          Net = Toplam kazanılan − dağıtılan hakediş − Sahanya kesintisi − diğer giderler.
+          Net = Toplam kazanılan − dağıtılan hakediş − kişilere giden pay − dolar giderleri.
           {data && data.tryPerUsd > 0 ? ` Kur: 1 $ = ${formatTry(data.tryPerUsd)} ₺${data.fxDate ? ` · ${data.fxDate}` : ""}.` : ""}
         </div>
       </main>

@@ -55,7 +55,7 @@ export async function GET(request: Request) {
 
   try {
     await ensureTables();
-    const [revenueResult, peopleResult, extrasResult, sahanyaResult, expensesResult, fx] = await Promise.all([
+    const [revenueResult, peopleResult, extrasResult, recipientSharesResult, expensesResult, fx] = await Promise.all([
       query<{ total: string }>(`
         SELECT COALESCE(SUM(amount), 0)::text AS total
         FROM sales
@@ -99,7 +99,6 @@ export async function GET(request: Request) {
         FROM sales s
         INNER JOIN money_recipients r ON r.id = s.recipient_id
         WHERE (s.sale_date AT TIME ZONE 'Europe/Istanbul')::date = $1::date
-          AND LOWER(TRIM(r.name)) = 'sahanya'
       `, [date]),
       query<{ id: number; label: string; kind: "percent" | "usd"; value: string }>(`
         SELECT id, label, kind, value::text
@@ -114,7 +113,7 @@ export async function GET(request: Request) {
     const peopleHakedisTry = Number(peopleResult.rows[0]?.total ?? 0);
     const specialRate = Number(extrasResult.rows[0]?.total ?? 0);
     const hakedisTry = peopleHakedisTry + revenueTry * specialRate;
-    const sahanyaTry = Number(sahanyaResult.rows[0]?.total ?? 0);
+    const recipientSharesTry = Number(recipientSharesResult.rows[0]?.total ?? 0);
     const tryPerUsd = Number(fx.tryPerUsd ?? 0);
     const expenses = expensesResult.rows.map((expense) => {
       const value = Number(expense.value);
@@ -122,10 +121,10 @@ export async function GET(request: Request) {
       return { ...expense, value, amountTry };
     });
     const expensesTry = expenses.reduce((sum, expense) => sum + expense.amountTry, 0);
-    const netTry = revenueTry - hakedisTry - sahanyaTry - expensesTry;
+    const netTry = revenueTry - hakedisTry - recipientSharesTry - expensesTry;
 
     return NextResponse.json({
-      date, revenueTry, hakedisTry, sahanyaTry, expensesTry, netTry, expenses,
+      date, revenueTry, hakedisTry, recipientSharesTry, expensesTry, netTry, expenses,
       tryPerUsd, fxDate: fx.fxDate, fxError: fx.error ?? null,
     });
   } catch (error) {
@@ -139,10 +138,9 @@ export async function POST(request: Request) {
   const body = await request.json();
   const date = String(body.date ?? "");
   const label = String(body.label ?? "").trim();
-  const kind = body.kind === "percent" ? "percent" : body.kind === "usd" ? "usd" : "";
   const value = Number(body.value);
 
-  if (!DATE_RE.test(date) || !label || !kind || !Number.isFinite(value) || value <= 0 || (kind === "percent" && value > 100)) {
+  if (!DATE_RE.test(date) || !label || !Number.isFinite(value) || value <= 0) {
     return NextResponse.json({ error: "invalid_expense" }, { status: 400 });
   }
 
@@ -150,9 +148,9 @@ export async function POST(request: Request) {
     await ensureTables();
     const result = await query<{ id: number }>(`
       INSERT INTO daily_profit_expenses (day_date, label, kind, value)
-      VALUES ($1::date, $2, $3, $4)
+      VALUES ($1::date, $2, 'usd', $3)
       RETURNING id
-    `, [date, label, kind, value]);
+    `, [date, label, value]);
     return NextResponse.json({ id: result.rows[0]?.id }, { status: 201 });
   } catch (error) {
     console.error("[daily-profit POST]", error);
